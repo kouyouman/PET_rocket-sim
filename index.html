@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Bottle Rocket Simulator</title>
+  
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  
+  <style>
+      :root {
+          --primary-color: #4caf50;
+          --secondary-color: #1976d2;
+          --cg-color: #d32f2f; /* Red for CG */
+          --cp-color: #1976d2; /* Blue for CP */
+          --water-color: #81d4fa; /* Light blue for Water */
+          --dim-color: #666; /* Dimension line color */
+          --background-color: #f7f9fc;
+          --panel-background: #ffffff;
+          --border-color: #e0e0e0;
+      }
+      body{font:16px/1.6 sans-serif;max-width:1280px;margin:2rem auto;padding:0 1rem;color:#333; background-color: var(--background-color);}
+      h2{text-align: center; color: var(--primary-color); border-bottom: none; margin-bottom: 1rem;}
+      
+      .tab-nav { display: flex; border-bottom: 2px solid var(--border-color); margin-bottom: 2rem; }
+      .tab-button { padding: 0.8rem 1.5rem; border: none; background: none; cursor: pointer; font-size: 1.1rem; color: #777; position: relative; top: 2px; transition: color 0.3s; }
+      .tab-button.active { color: var(--primary-color); border-bottom: 2px solid var(--primary-color); font-weight: bold; }
+      .tab-button:disabled { color: #ccc; cursor: not-allowed; }
+      .tabcontent { display: none; }
+      .tabcontent.active { display: block; }
+      
+      .container { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+      .input-panel { flex: 2; min-width: 420px; }
+      .results-panel { flex: 1; min-width: 280px; }
+      .visual-panel {
+          flex: 1;
+          min-width: 300px;
+          background-color: var(--panel-background);
+          border-radius: 8px;
+          padding: 1rem;
+          border: 1px solid var(--border-color);
+          align-self: flex-start;
+          position: sticky;
+          top: 2rem;
+      }
+
+      fieldset {
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          padding: 0.5rem 1.5rem 1.5rem;
+          margin-bottom: 1.5rem;
+      }
+      
+      .step-title { padding: 0.6rem 1rem; border-radius: 6px; font-weight: bold; margin: 1.5rem 0 1rem; font-size: 1.05em; }
+
+      legend { font-weight: bold; color: var(--primary-color); padding: 0 0.5rem; }
+
+      .input-group{display:flex;align-items:center;gap:1rem;flex-wrap:nowrap;margin:1rem 0}
+      .input-group label { font-size: 0.9em; }
+      .input-panel .input-group label { flex-basis: 220px; flex-shrink: 0; }
+      
+      input[type=range]{flex:1; min-width: 120px;}
+      .range-number {
+          width: 80px;
+          min-width: 80px;
+          padding: 5px 7px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          font-family: monospace;
+          font-size: 1.2rem; 
+          font-weight: bold; 
+          text-align: right;
+          color: var(--secondary-color);
+      }
+      output, .output-field {min-width:52px;padding:4px 8px;background:#f0f0f0;border-radius:4px;font-family:monospace;text-align:right}
+      .output-field { font-weight: bold; color: var(--secondary-color); font-size: 1.1em; }
+      
+      table{width:100%;border-collapse:collapse;margin-top:0;}
+      th,td{border:1px solid #ddd;padding:8px;text-align:center; font-size: 0.9em;}
+      th{background:#f2f2f2}
+      #ballast_out{margin-top:1.5rem;font-weight:bold;padding:1rem;border-radius:8px; text-align: center; font-size: 1.1em;}
+      .note { font-size: 0.9em; color: #555; margin-top: -0.8rem; padding-left: 1rem; }
+      
+      button{width: 100%; margin-top:1.5rem;padding:.8rem 1.5rem;font-size:1.1rem;border:none;border-radius:.4rem;color:#fff;cursor:pointer;transition:background .3s,transform .1s}
+      .btn-action { background-color: var(--primary-color); }
+      .btn-save { background-color: var(--secondary-color); }
+      .btn-load { background-color: #6c757d; padding: 0.2rem 0.8rem; font-size: 0.9rem; width: auto; margin: 0; }
+      .btn-delete { background-color: #dc3545; padding: 0.2rem 0.6rem; font-size: 0.9rem; width: auto; margin: 0; }
+      button:hover:not(:disabled){transform:translateY(-2px)}
+      button:disabled{background:#aaa!important;cursor:not-allowed}
+      
+      #preset-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+      #preset-list li:last-child { border-bottom: none; }
+      #preset-name { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+      
+      #rocket-canvas, #parachute-canvas { width: 100%; height: auto; max-height: 600px; }
+      #flight-plot-container { min-height: 400px; }
+      .legend-viz { text-align: center; margin-top: 0.5rem; font-size: 0.9em; display: flex; flex-wrap: wrap; justify-content: center;}
+      .legend-viz span { margin: 0 0.5rem; }
+      
+      #status-box { padding: 1rem; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 1.5rem; transition: background-color 0.3s, color 0.3s; }
+      #status-note { font-size: 0.9em; font-weight: normal; margin-top: 0.5rem; }
+      pre{white-space:pre-wrap;word-wrap:break-word;background:#222;color:#eee;padding:1rem;border-radius:8px}
+
+      @media (max-width: 1100px) {
+          .container { flex-direction: column; }
+          .results-panel, .visual-panel { position: static; }
+      }
+      
+      footer {
+          text-align: center;
+          margin-top: 3rem;
+          padding-top: 2rem;
+          font-size: 0.9em;
+          color: #777;
+          border-top: 1px solid var(--border-color);
+      }
+  
+      /* toggle styles */
+      .toggle-group{display:flex;gap:.6rem;flex-wrap:wrap;margin:.5rem 0 1rem 0}
+      .toggle{padding:.6rem 1rem;border:1px solid #d1d1d6;border-radius:9999px;background:#f2f2f7;color:#1c1c1e;font-weight:600;cursor:pointer}
+      .toggle.on{background:#0a84ff;color:#fff;border-color:#0a84ff;box-shadow:0 6px 14px rgba(10,132,255,.25)}
+      .toggle:focus{outline:3px solid rgba(10,132,255,.25)}
+      
+      /* ★★★ 吹き出し（ポップオーバー）用のCSS ★★★ */
+      
+      /* 「？」アイコンのスタイル */
+      .tooltip-trigger {
+          display: inline-block;
+          width: 1.1rem;
+          height: 1.1rem;
+          line-height: 1.1rem;
+          border-radius: 50%;
+          background: #aaa;
+          color: #fff;
+          text-align: center;
+          font-weight: bold;
+          font-size: 0.8em;
+          cursor: pointer;
+          margin-left: 4px;
+          vertical-align: middle;
+      }
+      .tooltip-trigger:hover {
+          background: var(--primary-color);
+      }
+      
+      /* ポップアップの背景（透明なクリック検知レイヤー） */
+      .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: transparent; /* 背景を透明に */
+          display: none; /* 普段は隠す */
+          z-index: 10000;
+          opacity: 0;
+          transition: opacity 0.2s ease;
+      }
+      
+      /* ポップアップ本体（吹き出し） */
+      .modal-content {
+          position: absolute; 
+          background: #333; /* 黒ベースの吹き出し */
+          color: #fff;
+          padding: 1rem 1.25rem;
+          border-radius: 10px;
+          width: auto; 
+          max-width: 300px; 
+          box-shadow: 0 5px 25px rgba(0,0,0,0.25);
+          transform: scale(0.95);
+          transition: transform 0.15s ease, opacity 0.15s ease;
+          opacity: 0;
+      }
+      .modal-content h3 {
+          margin-top: 0;
+          margin-bottom: 0.75rem;
+          color: var(--primary-color);
+          border-bottom: 1px solid #555;
+          padding-bottom: 0.5rem;
+          font-size: 1.1em;
+      }
+      .modal-content p {
+          line-height: 1.6;
+          font-size: 0.9em;
+          margin: 0;
+      }
+      .modal-close-btn { 
+          display: none; /* 閉じるボタンは不要 */
+      }
+      
+      /* 吹き出しの「しっぽ」（CSSで描画） */
+      .modal-content::before {
+          content: '';
+          position: absolute;
+          bottom: 100%; /* 吹き出しの上部中央 */
+          left: 50%;
+          transform: translateX(-50%);
+          border: 10px solid transparent;
+          border-bottom-color: #333; /* 吹き出しの背景色と同じ */
+      }
+      .modal-content.on-top::before {
+          bottom: auto; /* 上の設定を解除 */
+          top: 100%; /* 吹き出しの下部中央に配置 */
+          border-bottom-color: transparent; /* 下向きのしっぽを消す */
+          border-top-color: #333; /* 上向きのしっぽ（＝下向きの三角形）を描画 */
+      }
+      
+      /* ポップアップ表示時のアニメーション */
+      .modal-overlay.visible {
+          display: block;
+          opacity: 1;
+      }
+      .modal-overlay.visible .modal-content {
+          transform: scale(1);
+          opacity: 1;
+      }
+      
+      /* ★★★ ルビ（ふりがな）用のCSS ★★★ */
+      rt {
+          font-size: 0.5em; /* ルビの文字サイズを小さく */
+          color: #555;     /* 少し薄い色に */
+          font-weight: normal;
+          opacity: 0.9;
+          line-height: 1.1;
+      }
+      
+      /* ★★★ 吹き出し内のルビのスタイル ★★★ */
+      .modal-content rt {
+          color: #ccc; /* 吹き出し内ではルビを明るい色に */
+          font-size: 0.6em;
+      }
+  </style>
+</head>
+<body>
+<div id="wizard" style="position:fixed;inset:0;background:rgba(248,248,250,.92);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:9999;">
+  <div class="sheet" style="background:#fff;border:1px solid #e5e5ea;border-radius:18px;padding:22px;max-width:560px;width:92%;box-shadow:0 20px 40px rgba(0,0,0,.08)">
+    <h2 style="margin:.2rem 0 1rem 0">はじめに：<ruby>モード<rt></ruby>を<ruby>選択<rt>せんたく</rt></ruby></h2>
+    <div class="toggle-group">
+      <button type="button" id="wiz-mode-ws" class="toggle on" aria-pressed="true"
+        onclick="document.getElementById('workshop_mode').checked=true;this.classList.add('on');this.setAttribute('aria-pressed','true');document.getElementById('wiz-mode-pro').classList.remove('on');document.getElementById('wiz-mode-pro').setAttribute('aria-pressed','false');">ワークショップ</button>
+      <button type="button" id="wiz-mode-pro" class="toggle" aria-pressed="false"
+        onclick="document.getElementById('workshop_mode').checked=false;this.classList.add('on');this.setAttribute('aria-pressed','true');document.getElementById('wiz-mode-ws').classList.remove('on');document.getElementById('wiz-mode-ws').setAttribute('aria-pressed','false');">シミュレーション</button>
+    </div>
+    <h3 style="margin:.5rem 0 .5rem 0;font-size:1rem;color:#1c1c1e;"><ruby>ロケット</ruby><ruby>種別<rt>しゅべつ</rt></ruby></h3>
+    <div class="toggle-group">
+      <button type="button" id="wiz-type-pet" class="toggle on" aria-pressed="true"
+        onclick="document.getElementById('rocket_type').value='pet';this.classList.add('on');this.setAttribute('aria-pressed','true');document.getElementById('wiz-type-h2').classList.remove('on');document.getElementById('wiz-type-h2').setAttribute('aria-pressed','false');">ペットボトル</button>
+      <button type="button" id="wiz-type-h2" class="toggle" aria-pressed="false"
+        onclick="document.getElementById('rocket_type').value='hydrogen';this.classList.add('on');this.setAttribute('aria-pressed','true');document.getElementById('wiz-type-pet').classList.remove('on');document.getElementById('wiz-type-pet').setAttribute('aria-pressed','false');"><ruby>水素<rt>すいそ</rt></ruby></button>
+    </div>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.2rem;">
+      <button type="button" id="wiz-start" class="toggle on"
+        onclick="(function(){var w=document.getElementById('wizard');if(w)w.remove();lockSelection();onModeChanged();})();">スタート</button>
+    </div>
+  </div>
+</div>
+<button id="back-to-wizard" class="toggle" style="position:sticky;top:8px;left:8px;margin:8px;z-index:1000;display:none" onclick="openWizardForReselect()">← <ruby>設定<rt>せってい</rt></ruby>に<ruby>戻<rt>もど</rt></ruby>る</button>
+
+<div class="tab-nav">
+    <button class="tab-button active" onclick="openTab('stab')"><ruby>機体<rt>きたい</rt></ruby><ruby>設計<rt>せっけい</rt></ruby></button>
+    <button id="para-tab-button" class="tab-button" onclick="openTab('ptab')" disabled>パラシュート<ruby>設計<rt>せっけい</rt></ruby></button>
+    <button id="flight-tab-button" class="tab-button" onclick="openTab('ftab')" disabled>フライトシミュレーター</button>
+</div>
+
+<div id="stab" class="tabcontent active">
+  <h2>機体 静安定シミュレーター</h2>
+    <div class="container">
+        <div class="input-panel">
+            <fieldset id="mode-fieldset">
+                <legend><ruby>モード<rt>もーど</rt></ruby><ruby>設定<rt>せってい</rt></ruby></legend>
+                <div class="toggle-group" role="group" aria-label="モード">
+                    <button type="button" id="btn-mode-workshop" class="toggle on" aria-pressed="true">ワークショップ</button>
+                    <button type="button" id="btn-mode-pro" class="toggle" aria-pressed="false">シミュレーション</button>
+                </div>
+                <div class="toggle-group" role="group" aria-label="ロケット種別">
+                    <button type="button" id="btn-type-pet" class="toggle on" aria-pressed="true">ペットボトル</button>
+                    <button type="button" id="btn-type-h2" class="toggle" aria-pressed="false"><ruby>水素<rt>すいそ</rt></ruby></button>
+                </div>
+                <div style="display:none">
+                    <select id="rocket_type"><option value="pet" selected>pet</option><option value="hydrogen">hydrogen</option></select>
+                    <label><input type="checkbox" id="workshop_mode" checked>WS</label>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>📏 Step 1：<ruby>実測値<rt>じっそくち</rt></ruby></legend>
+                <p class="note" style="margin-top: -0.5rem; margin-bottom: 1rem;">手元にある材料の実際の寸法・重さを測って入力します。（ここは一度測ったら変えません）</p>
+
+                <div id="pet_step1_group">
+                    <div class="input-group"><label for="lnose">ノーズ<ruby>長<rt>ちょう</rt></ruby> (mm)</label><input id="lnose" type="range" min="5" max="500" value="80" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="wnose">ノーズ<ruby>重量<rt>じゅうりょう</rt></ruby> (g)</label><input id="wnose" type="range" min="1" max="150" value="20" oninput="updateStability()"></div>
+                    
+                    <div class="input-group"><label for="diam">ボトル<ruby>直径<rt>ちょっけい</rt></ruby> (mm)</label><input id="diam" type="range" min="5" max="110" value="66" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="lbody">ボトル<ruby>胴体長<rt>どうたいちょう</rt></ruby> (mm)</label><input id="lbody" type="range" min="10" max="2000" value="220" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="wbody">ボトル<ruby>胴体重量<rt>どうたいじゅうりょう</rt></ruby> (g)</label><input id="wbody" type="range" min="1" max="200" value="30" oninput="updateStability()"></div>
+                </div>
+
+                <div id="h2_step1_group" style="display: none;">
+                    <div class="input-group"><label for="d_upper"><ruby>上部筒<rt>じょうぶつつ</rt></ruby> 直径 (mm)</label><input id="d_upper" type="range" min="5" max="30" value="11" step="0.5" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="d_lower"><ruby>下部筒<rt>かぶつつ</rt></ruby> 直径 (mm)</label><input id="d_lower" type="range" min="5" max="30" value="16" step="0.5" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="l_trans">黒パーツ<ruby>露出長<rt>ろしゅつちょう</rt></ruby> (mm)</label><input id="l_trans" type="range" min="1" max="30" value="5" step="0.5" oninput="updateStability()"></div>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>🎨 Step 2：<ruby>設計値<rt>せっけいち</rt></ruby>（自分で自由に決めるパラメータ）</legend>
+                <p class="note" style="margin-top: -0.5rem; margin-bottom: 1rem;">フィンの形や水の量など、自由に決めてロケットの性能を変化させます。</p>
+
+                <div class="input-group"><label for="c_root"><ruby>根元<rt>ねもと</rt></ruby><ruby>長<rt>なが</rt></ruby>さ C<sub>r</sub> (mm)</label><input id="c_root" type="range" min="1" max="200" value="100" oninput="updateStability()"></div>
+                <div class="input-group"><label for="span"><ruby>高<rt>たか</rt></ruby>さ S (mm)</label><input id="span" type="range" min="1" max="150" value="80" oninput="updateStability()"></div>
+                <div class="input-group"><label for="sweep"><ruby>後退角<rt>こうたいかく</rt></ruby> (<ruby>度<rt>ど</rt></ruby>)</label><input id="sweep" type="range" min="0" max="45" value="10" oninput="updateStability()"></div>
+                <div class="input-group"><label><ruby>先端<rt>せんたん</rt></ruby><ruby>長<rt>なが</rt></ruby>さ C<sub>t</sub> (<ruby>自動計算<rt>じどうけいさん</rt></ruby>)</label><span id="c_tip_out" class="output-field">-- mm</span></div>
+                <div class="input-group"><label>1<ruby>枚<rt>まい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby>(<ruby>自動計算<rt>じどうけいさん</rt></ruby>)</label><span id="fin_area_out" class="output-field">-- cm²</span></div>
+                <div class="input-group"><label for="mfin">完成したフィン1<ruby>枚<rt>まい</rt></ruby>の<ruby>重<rt>おも</rt></ruby>さ (g)</label><input id="mfin" type="range" min="1" max="20" value="5" oninput="updateStability()"></div>
+                <div class="input-group"><label for="nfin">フィン<ruby>枚数<rt>まいすう</rt></ruby> N</label><input id="nfin" type="range" min="3" max="8" value="4" oninput="updateStability()"></div>
+                <div class="input-group"><label for="finpos">フィン<ruby>後端位置<rt>こうたんいち</rt></ruby> (<ruby>下<rt>した</rt></ruby>から, mm)</label><input id="finpos" type="range" min="1" max="100" value="20" oninput="updateStability()"></div>
+
+                <div id="pet_step2_group">
+                    <div class="input-group" id="vwater_group"><label for="vwater"><ruby>水量<rt>すいりょう</rt></ruby> (ml)</label><input id="vwater" type="range" min="5" max="1500" value="400" step="10" oninput="updateStability()"></div>
+                </div>
+
+                <div id="h2_step2_group" style="display: none;">
+                    <div class="input-group"><label for="l_upper"><ruby>上部筒<rt>じょうぶつつ</rt></ruby> 長さ (mm)</label><input id="l_upper" type="range" min="10" max="300" value="100" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="l_lower"><ruby>下部筒<rt>かぶつつ</rt></ruby> 長さ (mm)</label><input id="l_lower" type="range" min="10" max="300" value="150" oninput="updateStability()"></div>
+                    <div class="input-group"><label for="w_h2_body">完成した筒の<ruby>総重量<rt>そうじゅうりょう</rt></ruby> (g)</label><input id="w_h2_body" type="range" min="1" max="100" value="10" step="0.5" oninput="updateStability()"></div>
+                </div>
+
+                <div id="ws_ballast_group"> 
+                    <div class="input-group"> 
+                        <label for="ws_ballast"><ruby>追加<rt>ついか</rt></ruby>バラスト (<ruby>紙粘土<rt>かみねんど</rt></ruby>等) (g)</label>
+                        <input id="ws_ballast" type="range" min="0" max="300" step="1" value="0" oninput="updateStability()">
+                    </div> 
+                    <p class="note">※ノーズの重さに上乗せして重心を調整します。</p>
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend><ruby>設計<rt>せっけい</rt></ruby>メモリ</legend>
+                <input type="text" id="preset-name" placeholder="設計の名前を入力...">
+                <button class="btn-save" onclick="savePreset()"><ruby>現在<rt>げんざい</rt></ruby>の<ruby>設計<rt>せっけい</rt></ruby>を<ruby>保存<rt>ほぞん</rt></ruby></button>
+                <ul id="preset-list" style="list-style: none; padding: 0; margin-top: 1rem;"></ul>
+            </fieldset>
+        </div>
+        
+        <div class="results-panel">
+            <h3><ruby>計算<rt>けいさん</rt></ruby><ruby>結果<rt>けっか</rt></ruby></h3>
+            <table>
+                <thead><tr><th><ruby>状態<rt>じょうたい</rt></ruby></th><th><ruby>重心<rt>じゅうしん</rt></ruby> CG (mm) <span class="tooltip-trigger" onclick="showEducationModal(event, 'cg')">?</span></th><th><ruby>静安定<rt>せいあんてい</rt></ruby><ruby>余裕<rt>よゆう</rt></ruby> SM <span class="tooltip-trigger" onclick="showEducationModal(event, 'sm')">?</span></th></tr></thead>
+                <tbody><tr><td id="row-label-full"><ruby>満水<rt>まんすい</rt></ruby><ruby>時<rt>じ</rt></ruby></td><td id="cg_full">--</td><td id="sm_full">--</td></tr><tr><td id="row-label-empty"><ruby>噴射<rt>ふんしゃ</rt></ruby><ruby>後<rt>ご</rt></ruby></td><td id="cg_empty">--</td><td id="sm_empty">--</td></tr></tbody>
+            </table>
+            <p id="ballast_out"><ruby>計算<rt>けいさん</rt></ruby><ruby>待<rt>ま</rt></ruby>ち…</p>
+            <fieldset id="sm-target-fieldset">
+                <legend><ruby>安定性<rt>あんていせい</rt></ruby><ruby>目標<rt>もくひょう</rt></ruby> <span class="tooltip-trigger" onclick="showEducationModal(event, 'sm_target')">?</span></legend>
+                <div class="input-group"><label for="sm_target"><ruby>目標<rt>もくひょう</rt></ruby>SM (<ruby>満水<rt>まんすい</rt></ruby><ruby>時<rt>じ</rt></ruby>)</label><input id="sm_target" type="range" min="0.5" max="2.5" value="1.2" step="0.1" oninput="updateStability()"></div>
+                <p class="note"><ruby>安全<rt>あんぜん</rt></ruby>のため、0.8<ruby>以上<rt>いじょう</rt></ruby>を<ruby>推奨<rt>すいしょう</rt></ruby>します。</p>
+            </fieldset>
+            <div id="status-box">
+                <p id="status-text"><ruby>安定性<rt>あんていせい</rt></ruby>を<ruby>計算<rt>けいさん</rt></ruby>してください</p>
+                <p id="status-note"></p>
+            </div>
+        </div>
+        
+     <div class="visual-panel">
+            <canvas id="rocket-canvas" style="width: 100%; height: 450px; background-color: #eee; border-radius: 8px; cursor: grab;"></canvas>
+            <div class="legend-viz">
+                <span style="color: var(--cg-color);">● CG (<ruby>満水<rt>まんすい</rt></ruby>)</span>
+                <span style="color: var(--cg-color);">○ CG (<ruby>空<rt>から</rt></ruby>)</span>
+                <span style="color: var(--cp-color);">+ CP <span class="tooltip-trigger" onclick="showEducationModal(event, 'cp')">?</span></span>
+            </div>
+            <fieldset style="border: none; padding: 0.8rem; margin-top: 1rem;">
+                <div class="input-group" style="margin: 0.5rem 0 0 0;">
+                    <label for="color-nose" style="flex-basis: auto; min-width: 60px;">ノーズ:</label>
+                    <input type="color" id="color-nose" value="#e0e0e0" onchange="updateStability()">
+                </div>
+                <div class="input-group" style="margin: 0.5rem 0 0 0;">
+                    <label for="color-body" style="flex-basis: auto; min-width: 60px;">胴体:</label>
+                    <input type="color" id="color-body" value="#d8d8d8" onchange="updateStability()">
+                </div>
+                <div class="input-group" style="margin: 0.5rem 0 0 0;">
+                    <label for="color-fin" style="flex-basis: auto; min-width: 60px;">フィン:</label>
+                    <input type="color" id="color-fin" value="#bdbdbd" onchange="updateStability()">
+                </div>
+            </fieldset>
+        </div>
+    </div>
+</div>
+
+<div id="ptab" class="tabcontent">
+    <h2>パラシュート<ruby>設計<rt>せっけい</rt></ruby>シミュレーター</h2>
+    <div class="container">
+        <div class="input-panel">
+            <fieldset>
+                <legend><ruby>入力<rt>にゅうりょく</rt></ruby>パラメータ</legend>
+                <div class="input-group">
+                    <label><ruby>機体<rt>きたい</rt></ruby><ruby>質量<rt>しつりょう</rt></ruby> (<ruby>噴射<rt>ふんしゃ</rt></ruby><ruby>後<rt>ご</rt></ruby>) (g)</label>
+                    <output id="para_mass_out">--</output>
+                </div>
+                 <p class="note" style="margin-top: -1rem;"><ruby>機体<rt>きたい</rt></ruby><ruby>設計<rt>せっけい</rt></ruby>タブの<ruby>計算<rt>けいさん</rt></ruby><ruby>結果<rt>けっか</rt></ruby>から<ruby>自動<rt>じどう</rt></ruby><ruby>入力<rt>にゅうりょく</rt></ruby>されます。</p>
+                <div class="input-group">
+                    <label for="para_vdown"><ruby>目標<rt>もくひょう</rt></ruby><ruby>降下<rt>こうか</rt></ruby><ruby>速度<rt>そくど</rt></ruby> (m/s)</label>
+                    <input id="para_vdown" type="range" min="3" max="8" value="5" step="0.1" oninput="this.nextElementSibling.value=this.value;updateParachute()"><output>5</output>
+                </div>
+                <p class="note" style="margin-top: -1rem;">3.5～4.5m/sが<ruby>安全<rt>あんぜん</rt></ruby>で<ruby>風<rt>かぜ</rt></ruby>に<ruby>流<rt>なが</rt></ruby>されにくい<ruby>推奨<rt>すいしょう</rt></ruby><ruby>値<rt>ち</rt></ruby>です。</p>
+                <div class="input-group">
+                    <label for="para_cdp"><ruby>抗力<rt>こうりょく</rt></ruby><ruby>係数<rt>けいすう</rt></ruby> Cdp <span class="tooltip-trigger" onclick="showEducationModal(event, 'cdp')">?</span></label>
+                    <input id="para_cdp" type="range" min="0.5" max="1.5" value="0.75" step="0.01" oninput="this.nextElementSibling.value=this.value;updateParachute()"><output>0.75</output>
+                </div>
+                <p class="note" style="margin-top: -1rem;"><ruby>半球<rt>はんきゅう</rt></ruby><ruby>形<rt>けい</rt></ruby>パラシュートの<ruby>一般<rt>いっぱん</rt></ruby><ruby>的<rt>てき</rt></ruby>な<ruby>値<rt>あたい</rt></ruby>は0.75です。</p>
+            </fieldset>
+        </div>
+        <div class="results-panel">
+             <h3><ruby>計算<rt>けいさん</rt></ruby><ruby>結果<rt>けっか</rt></ruby></h3>
+            <table>
+                <thead><tr><th><ruby>項目<rt>こうもく</rt></ruby></th><th><ruby>計算<rt>けいさん</rt></ruby><ruby>値<rt>ち</rt></ruby></th></tr></thead>
+                <tbody>
+                    <tr><td><ruby>投影<rt>とうえい</rt></ruby><ruby>面積<rt>めんせき</rt></ruby> (m²)</td><td id="sp_out">--</td></tr>
+                    <tr><td><ruby>投影<rt>とうえい</rt></ruby><ruby>直径<rt>ちょっけい</rt></ruby> (cm)</td><td id="dp_out">--</td></tr>
+                    <tr><td><ruby>布<rt>ぬの</rt></ruby>の<ruby>直径<rt>ちょっけい</rt></ruby> (<ruby>平置<rt>ひらお</rt></ruby>き, cm)</td><td id="dp0_out">--</td></tr>
+                    <tr><td><ruby>正六角形<rt>せいろっかっけい</rt></ruby>の<ruby>布<rt>ぬの</rt></ruby>の<ruby>一辺<rt>いっぺん</rt></ruby> (cm)</td><td id="lph_out">--</td></tr>
+                    <tr><td><ruby>正方形<rt>せいほうけい</rt></ruby>の<ruby>生地<rt>きじ</rt></ruby>の<ruby>一辺<rt>いっぺん</rt></ruby> (cm)</td><td id="lps_out">--</td></tr>
+                    <tr><td>シュラウドライン<ruby>長<rt>なが</rt></ruby>さ (cm)</td><td id="lsl_out">--</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="visual-panel">
+            <svg id="parachute-canvas"></svg>
+        </div>
+    </div>
+</div>
+
+<div id="ftab" class="tabcontent">
+    <h2>フライトシミュレーター(<ruby>現在<rt>げんざい</rt></ruby><ruby>調節<rt>ちょうせつ</rt></ruby><ruby>中<rt>ちゅう</rt></ruby>・・・)</h2>
+    <div class="container">
+        <div class="input-panel">
+            <fieldset>
+                <legend><ruby>入力<rt>にゅうりょく</rt></ruby>パラメータ</legend>
+                <div class="input-group">
+                    <label for="flight_pressure"><ruby>初期<rt>しょき</rt></ruby><ruby>内圧<rt>ないあつ</rt></ruby> (<ruby>気圧<rt>きあつ</rt></ruby>)</label>
+                    <input id="flight_pressure" type="range" min="3" max="8" value="5" step="0.5" oninput="this.nextElementSibling.value=this.value"><output>5</output>
+                </div>
+                <div class="input-group">
+                    <label for="flight_d_noz">ノズル<ruby>径<rt>けい</rt></ruby> (mm)</label>
+                    <input id="flight_d_noz" type="range" min="5" max="21" value="8" step="0.5" oninput="this.nextElementSibling.value=this.value"><output>8</output>
+                </div>
+            </fieldset>
+            <button id="run-flight-sim" class="btn-action" onclick="runFlightSimulation()">シミュレーション<ruby>実行<rt>じっこう</rt></ruby></button>
+        </div>
+        <div class="results-panel">
+             <h3><ruby>計算<rt>けいさん</rt></ruby><ruby>結果<rt>けっか</rt></ruby></h3>
+            <table>
+                <thead><tr><th><ruby>項目<rt>こうもく</rt></ruby></th><th><ruby>計算<rt>けいさん</rt></ruby><ruby>値<rt>ち</rt></ruby></th></tr></thead>
+                <tbody>
+                    <tr><td><ruby>最高<rt>さいこう</rt></ruby><ruby>高度<rt>こうど</rt></ruby> (m)</td><td id="max_h_out">--</td></tr>
+                    <tr><td><ruby>最高<rt>さいこう</rt></ruby><ruby>速度<rt>そくど</rt></ruby> (m/s)</td><td id="max_v_out">--</td></tr>
+                    <tr><td><ruby>最高<rt>さいこう</rt></ruby><ruby>推力<rt>すいりょく</rt></ruby> (N)</td><td id="max_f_out">--</td></tr>
+                    <tr><td><ruby>水<rt>みず</rt></ruby><ruby>噴射<rt>ふんしゃ</rt></ruby><ruby>時間<rt>じかん</rt></ruby> (s)</td><td id="t_water_out">--</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="visual-panel">
+            <div id="flight-plot-container"></div>
+        </div>
+    </div>
+</div>
+
+
+<footer>
+  <p>Developed by Koyoman</p>
+</footer>
+
+<div id="education-modal" class="modal-overlay" onclick="closeEducationModal(event)">
+    <div class="modal-content">
+        <h3 id="modal-title"><ruby>用語<rt>ようご</rt></ruby><ruby>解説<rt>かいせつ</rt></ruby></h3>
+        <p id="modal-text">ここに<ruby>解説<rt>かいせつ</rt></ruby><ruby>文<rt>ぶん</rt></ruby>が<ruby>入<rt>はい</rt></ruby>ります。</p>
+        <button class="modal-close-btn" onclick="closeEducationModal()"><ruby>閉<rt>と</rt></ruby>じる</button>
+    </div>
+</div>
+
+
+<script>
+let currentSharedMode = 'pet';
+const sharedParamStates = {
+    // ペットボトル用の美しい初期値
+    pet: { lnose: 80, wnose: 20, c_root: 80, span: 60, sweep: 10, nfin: 4, mfin: 5, finpos: 20 },
+    // 水素ロケット（CAD準拠）の美しい初期値（ノーズは粘土として扱うため小さく・軽く固定）
+    hydrogen: { lnose: 15, wnose: 0, c_root: 30, span: 20, sweep: 15, nfin: 4, mfin: 1, finpos: 0 }
+};
+const sharedParamIds = ['lnose', 'wnose', 'c_root', 'span', 'sweep', 'nfin', 'mfin', 'finpos'];
+
+function onModeChanged(){
+  var selType = document.getElementById('rocket_type');
+  var ws = document.getElementById('workshop_mode');
+  rocketType = selType && selType.value ? selType.value : 'pet';
+  workshopMode = !!(ws && ws.checked);
+
+  if (rocketType !== currentSharedMode) {
+      // 1. 今のモードの数値を保存する
+      sharedParamIds.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) sharedParamStates[currentSharedMode][id] = el.value;
+      });
+      // 2. 新しいモードの初期値（または保存された値）を読み込む
+      sharedParamIds.forEach(id => {
+          const el = document.getElementById(id);
+          if (el && sharedParamStates[rocketType][id] !== undefined) {
+              el.value = sharedParamStates[rocketType][id];
+              // 横の数値入力ボックスも同時に更新
+              if (el.nextElementSibling) el.nextElementSibling.value = el.value;
+          }
+      });
+      currentSharedMode = rocketType;
+  }
+
+
+  // --- UI要素の取得 ---
+  var vwater_group = document.getElementById('vwater')?.closest('.input-group');
+  var vwater_input = document.getElementById('vwater');
+  
+  var ballast_group = document.getElementById('ws_ballast_group'); // 紙粘土
+  var ballast_input = document.getElementById('ws_ballast');
+
+  var sm_fieldset = document.getElementById('sm-target-fieldset'); // 目標SM
+  var sm_input = document.getElementById('sm_target');
+
+  var ballastEl = document.getElementById('ballast_out'); // 推奨紙粘土
+  var sb = document.getElementById('status-box'); // 安定性
+  var rowEmpty = document.getElementById('row-label-empty')?.parentElement;
+  const labelFull = document.getElementById('row-label-full');
+
+  // --- モード別UI制御 ---
+
+ // 1. ロケット種別 (ペットボトル / 水素)
+  const isPet = (rocketType === 'pet');
+  
+  // ★グループを取得して表示・非表示を切り替える
+ // ★グループを取得して表示・非表示を切り替える
+  const petStep1 = document.getElementById('pet_step1_group');
+  const petStep2 = document.getElementById('pet_step2_group');
+  const h2Step1 = document.getElementById('h2_step1_group');
+  const h2Step2 = document.getElementById('h2_step2_group');
+
+  if (petStep1) petStep1.style.display = isPet ? '' : 'none';
+  if (petStep2) petStep2.style.display = isPet ? '' : 'none';
+  if (h2Step1) h2Step1.style.display = isPet ? 'none' : '';
+  if (h2Step2) h2Step2.style.display = isPet ? 'none' : '';
+  
+  if (labelFull) labelFull.textContent = isPet ? '満水時' : '計算値';
+  if (rowEmpty) rowEmpty.style.display = isPet ? '' : 'none';
+  // 2. モード (ワークショップ / シミュレーション)
+  // ★★★ ここがロジックの核心 ★★★
+  if (workshopMode) {
+      // ワークショップモード：紙粘土を入力、目標SMは隠す
+      if (ballast_group) ballast_group.style.display = '';
+      if (ballast_input) ballast_input.disabled = false;
+      if (sm_fieldset) sm_fieldset.style.display = 'none';
+      if (sm_input) sm_input.disabled = true;
+      if (ballastEl) ballastEl.style.display = 'none'; // 推奨紙粘土は隠す
+      if (sb) sb.style.display = 'none'; // 安定性警告は隠す
+  } else {
+      // シミュレーションモード：目標SMを入力、紙粘土は隠す
+      if (ballast_group) ballast_group.style.display = 'none';
+      if (ballast_input) ballast_input.disabled = true;
+      if (sm_fieldset) sm_fieldset.style.display = '';
+      if (sm_input) sm_input.disabled = false;
+      if (ballastEl) ballastEl.style.display = ''; // 推奨紙粘土は表示
+      if (sb) sb.style.display = 'block'; // 安定性警告は表示
+  }
+  // ★★★ ここまで ★★★
+
+  // --- UIの見た目を同期 ---
+  var bw = document.getElementById('btn-mode-workshop'), bp = document.getElementById('btn-mode-pro');
+  if (bw && bp){ if(workshopMode){ bw.classList.add('on'); bp.classList.remove('on'); } else { bp.classList.add('on'); bw.classList.remove('on'); } }
+  var btpet = document.getElementById('btn-type-pet'), bth2 = document.getElementById('btn-type-h2');
+  if (btpet && bth2){ if(rocketType==='pet'){ btpet.classList.add('on'); bth2.classList.remove('on'); } else { bth2.classList.add('on'); btpet.classList.remove('on'); } }
+
+  updateStability();
+}
+let py, lastResult = null;
+let rocketType='pet';
+let workshopMode=true;
+let selectionIsLocked=false;
+const stabParamIds = [
+    'diam', 'lbody', 'lnose', 'wnose', 'wbody', 'vwater',
+    'c_root', 'span', 'sweep',
+    'nfin', 'mfin', 'finpos', 'sm_target',
+    // --- 水素ロケット用に追加 ---
+    'd_upper', 'l_upper', 'l_trans', 'd_lower', 'l_lower', 'w_h2_body'
+];
+
+// --- タブ切り替え ---
+function openTab(tabName) {
+    const tabButton = document.querySelector(`.tab-button[onclick="openTab('${tabName}')"]`);
+    if (tabButton && tabButton.disabled) {
+        return;
+    }
+    openTab.current = tabName; // 現在のタブを記録
+    
+    // 先にすべてのタブを非表示にし、選択されたタブを表示（幅を持たせる）
+    document.querySelectorAll('.tabcontent').forEach(d => d.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    document.getElementById(tabName).classList.add('active');
+    if (tabButton) tabButton.classList.add('active');
+
+    // ★タブが表示されてからパラシュートの計算と描画を実行する
+    if (tabName === 'ptab') prepareParachuteData(); 
+}
+
+// --- メイン処理 ---
+async function main() {
+    py = await loadPyodide();
+    await py.loadPackage(["numpy", "matplotlib", "scipy"]);
+    
+    await py.runPython(`
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp, quad
+import math
+
+def run_flight_simulation(params):
+    P0_atm = params.get('P0_atm', 5)
+    d_noz_mm = params.get('d_noz_mm', 8)
+    m_dry_g = params.get('m_dry_g', 50)
+    d_body_mm = params.get('d_body_mm', 66)
+    Vw0_ml = params.get('Vw0_ml', 400)
+    l_body_mm = params.get('l_body_mm', 220)
+    
+    P0 = P0_atm * 101325
+    Patm = 101325
+    d_noz = d_noz_mm / 1000.0
+    A_noz = np.pi * (d_noz / 2)**2
+    m_dry = m_dry_g / 1000.0
+    d_body = d_body_mm / 1000.0
+    A_body = np.pi * (d_body / 2)**2
+    Vw0 = Vw0_ml / 1e6
+    Vb = np.pi * (d_body / 2)**2 * (l_body_mm / 1000.0)
+    V0 = Vb - Vw0
+    if V0 <= 0: V0 = 1e-6 # 容積エラー防止
+    
+    rho_water = 1000
+    rho_air = 1.2
+    n = 1.2
+    tau = 0.5
+    Cd = 0.5
+
+    def dt_dVw(Vw):
+        V_air = V0 + (Vw0 - Vw)
+        P = P0 * (V0 / V_air)**n if V_air > 0 else P0
+        dP = max(P - Patm, 1e-3)
+        Ve = np.sqrt(2 * dP / rho_water)
+        return 1.0 / (A_noz * Ve) if (A_noz * Ve) > 0 else np.inf
+    
+    t_water_jet = 0.0
+    if Vw0 > 1e-9:
+        try:
+            t_water_jet, _ = quad(dt_dVw, 0, Vw0)
+        except Exception as e:
+            t_water_jet = 0.0 # 積分エラー時
+            
+    V_end = V0 + Vw0
+    P_air0 = P0 * (V0 / V_end)**n if V_end > 0 else P0
+
+    def F_thrust(t):
+        if t < t_water_jet:
+            Vw_t = Vw0 * (1 - t / t_water_jet) if t_water_jet > 0 else 0
+            V_t = V0 + (Vw0 - Vw_t)
+            P_t = P0 * (V0 / V_t)**n if V_t > 0 else P0
+            if P_t <= Patm: return 0.0
+            Ve = np.sqrt(2 * (P_t - Patm) / rho_water)
+            mdot = rho_water * A_noz * Ve
+            return (P_t - Patm) * A_noz + mdot * Ve
+        else:
+            t_air = t - t_water_jet
+            P_rem = P_air0 * np.exp(-t_air / tau)
+            if P_rem <= Patm: return 0.0
+            Ve_air = np.sqrt(2 * (P_rem - Patm) / rho_air)
+            mdot_air = rho_air * A_noz * Ve_air
+            return (P_rem - Patm) * A_noz + mdot_air * Ve_air
+
+    def rocket_dynamics(t, y):
+        v, h = y
+        m = m_dry + rho_water * Vw0 * (1 - t / t_water_jet) if t < t_water_jet and t_water_jet > 0 else m_dry
+        F = F_thrust(t)
+        D = 0.5 * Cd * rho_air * A_body * v**2 * np.sign(v)
+        a = (F - D - m * 9.81) / m if m > 1e-6 else 0
+        return [a, v]
+
+    def hit_ground(t, y): return y[1]
+    hit_ground.terminal = True
+    hit_ground.direction = -1
+
+    y0 = [0.0, 0.0]
+    t_span = (0, 30.0)
+    sol = solve_ivp(rocket_dynamics, t_span, y0, events=hit_ground, max_step=0.01, dense_output=True)
+
+    t_vals, v_vals, h_vals = sol.t, sol.y[0], sol.y[1]
+    F_list = np.array([F_thrust(t) for t in t_vals])
+
+    max_v = float(v_vals.max())
+    max_h = float(h_vals.max())
+    max_F = float(F_list.max())
+
+    plt.clf()
+    fig, ax1 = plt.subplots(figsize=(6, 4))
+    ax1.plot(t_vals, v_vals, label='速度 (m/s)', color='blue')
+    ax1.plot(t_vals, h_vals, label='高度 (m)', color='orange')
+    ax1.set_xlabel('時間 (s)')
+    ax1.set_ylabel('速度 & 高度')
+    ax1.grid(True)
+    ax1.legend(loc='upper left')
+
+    ax2 = ax1.twinx()
+    ax2.plot(t_vals, F_list, color='green', label='推力 (N)', linestyle='--')
+    ax2.set_ylabel('推力')
+    ax2.legend(loc='upper right')
+
+    fig.tight_layout()
+    plt.savefig('flight_profile.png', dpi=100)
+    
+    return {
+        'max_h': max_h, 'max_v': max_v, 'max_F': max_F,
+        't_water_jet': t_water_jet, 'plot_path': 'flight_profile.png'
+    }
+
+def calc_stability(params):
+    mode = params.get('mode', 'pet')
+    
+    # --- 共通パラメータ ---
+    L_nose = params.get('Lnose', 0)
+    m_nose_g = params.get('Wnose', 0)
+    Cr = params.get('Cr', 0)
+    Ct = params.get('Ct', 0)
+    S = params.get('S', 0)
+    Sweep_deg = params.get('Sweep', 0)
+    N_fin = params.get('Nfin', 0)
+    m_fin_g = params.get('Mfin', 0)
+    Fin_pos = params.get('FinPos', 0)
+    SM_t = params.get('SM_t', None) 
+    W_ballast_ws = params.get('W_ballast_ws', 0) 
+    
+    # フィン1枚の面積と総重量
+    S_fin_one_cm2 = (Cr + Ct) / 2.0 * S / 100.0 if (Cr + Ct) > 0 else 0
+    m_fin_total_g = N_fin * m_fin_g
+    
+    # フィンのCPローカル位置（前縁からの距離）
+    LE_sweep_dist = S * math.tan(math.radians(Sweep_deg)) if S > 0 and Sweep_deg >= 0 else 0
+    cr_ct_sum = Cr + Ct
+    if cr_ct_sum > 1e-6:
+        term1 = (LE_sweep_dist * (Cr + 2 * Ct) / (3 * cr_ct_sum))
+        term2 = ((1/6) * (cr_ct_sum - (Cr * Ct / cr_ct_sum)))
+        x_cp_local = term1 + term2
+    else:
+        x_cp_local = 0
+        
+    x_fin_cg_mass = (Cr / 2.0) # フィン前端からの重心
+    
+    m_ballast_g = 0.0
+    
+    # ==========================================
+    # ▼ ペットボトルモードの計算 ▼
+    # ==========================================
+    if mode == 'pet':
+        D_mm = params.get('D', 66)
+        L_body = params.get('Lbody', 220)
+        m_body_g = params.get('Wbody', 30)
+        V_water = params.get('Vw', 0)
+        
+        D_m = D_mm / 1000.0
+        A_ref = math.pi * (D_m / 2)**2
+        
+        # ノーズ
+        Cn_nose, x_nose_cp = 2.0, 0.666 * L_nose
+        # フィン
+        S_fin_total_m2 = S_fin_one_cm2 * N_fin / 1e4
+        Cn_fin = 2 * S_fin_total_m2 / A_ref if A_ref > 1e-6 else 0
+        x_fin_le = L_nose + L_body - Fin_pos - Cr
+        x_fin_cp_cg = x_fin_le + x_cp_local
+        
+        # CP
+        Cn_total = Cn_nose + Cn_fin
+        CP = (Cn_nose * x_nose_cp + Cn_fin * x_fin_cp_cg) / Cn_total if Cn_total > 1e-6 else 0
+        
+        # 重心(CG)
+        m_water_g = float(V_water)
+        x_cg_nose = 0.666 * L_nose
+        x_cg_body = L_nose + 0.5 * L_body
+        x_cg_water = L_nose + 0.5 * L_body
+        x_cg_ballast = 0.05 * L_nose
+        x_fin_cg_mass_global = x_fin_le + x_fin_cg_mass
+        
+        if SM_t is not None:
+            CG_req = CP - SM_t * D_mm
+            moment_full_no_ballast = (m_nose_g * x_cg_nose) + (m_body_g * x_cg_body) + (m_fin_total_g * x_fin_cg_mass_global) + (m_water_g * x_cg_water)
+            M_full_no_ballast = m_nose_g + m_body_g + m_fin_total_g + m_water_g
+            denom = CG_req - x_cg_ballast
+            m_ballast_g = max(0.0, (moment_full_no_ballast - CG_req * M_full_no_ballast) / denom) if abs(denom) > 1e-6 else 99999.0
+        else:
+            m_ballast_g = W_ballast_ws
+            
+        moment_full_no_ballast = (m_nose_g * x_cg_nose) + (m_body_g * x_cg_body) + (m_fin_total_g * x_fin_cg_mass_global) + (m_water_g * x_cg_water)
+        M_full_no_ballast = m_nose_g + m_body_g + m_fin_total_g + m_water_g
+        moment_empty_no_ballast = (m_nose_g * x_cg_nose) + (m_body_g * x_cg_body) + (m_fin_total_g * x_fin_cg_mass_global)
+        M_empty_no_ballast = m_nose_g + m_body_g + m_fin_total_g
+        
+        M_full = M_full_no_ballast + m_ballast_g
+        M_empty = M_empty_no_ballast + m_ballast_g
+        CG_full = (moment_full_no_ballast + m_ballast_g * x_cg_ballast) / M_full if M_full > 1e-6 else 0
+        CG_empty = (moment_empty_no_ballast + m_ballast_g * x_cg_ballast) / M_empty if M_empty > 1e-6 else 0
+        SM_full = (CP - CG_full) / D_mm if D_mm > 1e-6 else 0
+        SM_empty = (CP - CG_empty) / D_mm if D_mm > 1e-6 else 0
+
+    # ==========================================
+    # ▼ 水素ロケットモードの計算 ▼
+    # ==========================================
+    else:
+        D_up = params.get('D_up', 11)
+        L_up = params.get('L_up', 100)
+        L_trans = params.get('L_trans', 5)
+        D_low = params.get('D_low', 16)
+        L_low = params.get('L_low', 150)
+        m_h2_body = params.get('W_h2', 10)
+        
+        D_ref = max(D_low, D_up) # 最も太い部分を基準とする
+        D_m = D_ref / 1000.0
+        A_ref = math.pi * (D_m / 2)**2
+        
+        total_body_length = L_up + L_trans + L_low
+        
+        # 1. ノーズ
+        Cn_nose, x_nose_cp = 2.0, 0.666 * L_nose
+        
+        # 2. トランジション（段差部分：バローマン方程式）
+        # D_up から D_low へ広がる部分で揚力が発生
+        if D_low > D_up and D_ref > 1e-6 and L_trans > 1e-6:
+            Cn_t = 2.0 * ((D_low / D_ref)**2 - (D_up / D_ref)**2)
+            ratio = D_up / D_low
+            X_t_local = (L_trans / 3.0) * (1.0 + (1.0 - ratio) / (1.0 - ratio**2)) if (1.0 - ratio**2) > 1e-6 else L_trans / 2.0
+            x_t_cp = L_nose + L_up + X_t_local
+        else:
+            Cn_t, x_t_cp = 0.0, 0.0
+            
+        # 3. フィン
+        S_fin_total_m2 = S_fin_one_cm2 * N_fin / 1e4
+        Cn_fin = 2 * S_fin_total_m2 / A_ref if A_ref > 1e-6 else 0
+        x_fin_le = L_nose + total_body_length - Fin_pos - Cr
+        x_fin_cp_cg = x_fin_le + x_cp_local
+        
+        # CP (全体)
+        Cn_total = Cn_nose + Cn_t + Cn_fin
+        CP = (Cn_nose * x_nose_cp + Cn_t * x_t_cp + Cn_fin * x_fin_cp_cg) / Cn_total if Cn_total > 1e-6 else 0
+        
+        # 重心(CG)
+        x_cg_nose = 0.666 * L_nose
+        x_cg_body = L_nose + total_body_length / 2.0 # 簡易的に中心とする
+        x_cg_ballast = 0.05 * L_nose
+        x_fin_cg_mass_global = x_fin_le + x_fin_cg_mass
+        
+        if SM_t is not None:
+            CG_req = CP - SM_t * D_ref
+            moment_no_ballast = (m_nose_g * x_cg_nose) + (m_h2_body * x_cg_body) + (m_fin_total_g * x_fin_cg_mass_global)
+            M_no_ballast = m_nose_g + m_h2_body + m_fin_total_g
+            denom = CG_req - x_cg_ballast
+            m_ballast_g = max(0.0, (moment_no_ballast - CG_req * M_no_ballast) / denom) if abs(denom) > 1e-6 else 99999.0
+        else:
+            m_ballast_g = W_ballast_ws
+            
+        M_empty = m_nose_g + m_h2_body + m_fin_total_g + m_ballast_g
+        moment_empty = (m_nose_g * x_cg_nose) + (m_h2_body * x_cg_body) + (m_fin_total_g * x_fin_cg_mass_global) + (m_ballast_g * x_cg_ballast)
+        
+        CG_full = moment_empty / M_empty if M_empty > 1e-6 else 0
+        CG_empty = CG_full # 水素は水がないため満水と空が同じ
+        SM_full = (CP - CG_full) / D_ref if D_ref > 1e-6 else 0
+        SM_empty = SM_full
+
+    return dict(m_ballast=round(m_ballast_g, 1), CP=round(CP, 1), CG_full=round(CG_full, 1), SM_full=round(SM_full, 2), CG_empty=round(CG_empty, 1), SM_empty=round(SM_empty, 2), S_fin_one_cm2=round(S_fin_one_cm2, 1), Ct=round(Ct,1), M_empty=round(M_empty, 1))`);
+    
+    document.getElementById('stab').classList.add('active');
+    // ★★★ Pyodideロード後にUIを初期化し、計算を実行 ★★★
+    onModeChanged(); 
+    // (onModeChanged の最後で updateStability() が呼ばれるので、
+    //  ここにあった updateStability() の呼び出しは不要です)
+}
+
+// --- 機体安定性シミュレーター ---
+async function updateStability() {
+    if (!py) return;
+    const params = getStabParamsFromUI() || {};
+    
+    // ... (Ctの計算は変更なし) ...
+    const Cr_el = document.getElementById('c_root');
+    const S_el = document.getElementById('span');
+    const Sweep_el = document.getElementById('sweep');
+
+    if (!Cr_el || !S_el || !Sweep_el) {
+        console.error('Slider elements not found for stability calculation.');
+        return;
+    }
+    const Cr = +Cr_el.value;
+    const S = +S_el.value;
+    const Sweep = +Sweep_el.value;
+    
+    const le_sweep_dist = S * Math.tan(Sweep * Math.PI / 180);
+    let Ct = Cr - le_sweep_dist;
+
+    const ct_out_el = document.getElementById('c_tip_out');
+    if (Ct < 0) { 
+        Ct = 0; 
+        if (ct_out_el) {
+            ct_out_el.style.color = 'var(--cg-color)'; // Red
+            ct_out_el.style.fontWeight = 'bold';
+        }
+    } else {
+        if (ct_out_el) {
+            ct_out_el.style.color = 'var(--secondary-color)'; // Default Blue
+            ct_out_el.style.fontWeight = 'normal';
+        }
+    }
+    
+    if (ct_out_el) ct_out_el.textContent = `${Ct.toFixed(1)} mm`;
+    params['Ct'] = Ct;
+    
+    if (rocketType==='hydrogen'){ params['Vw'] = 0; }
+    params['mode'] = rocketType; // ★Pythonにモードを伝える
+    
+    // Python関数を呼び出し
+    const r = (py.globals.get('calc_stability')(py.toPy(params))).toJs({ deep_parse: true });
+
+    lastResult = r;
+    var tbody = document.querySelector('.results-panel table tbody'); 
+    if (tbody && tbody.rows && tbody.rows.length>=2){ 
+        tbody.rows[1].style.display=(rocketType==='pet')?'':'none'; 
+    }
+
+    drawRocket3D(params, r);
+
+    const fin_area_out_el = document.getElementById('fin_area_out');
+    if (fin_area_out_el) fin_area_out_el.textContent = `${r.S_fin_one_cm2} cm²`;
+    
+    const cg_full_el = document.getElementById('cg_full');
+    if (cg_full_el) cg_full_el.textContent = r.CG_full;
+    
+    const sm_full_el = document.getElementById('sm_full');
+    if (sm_full_el) sm_full_el.textContent = r.SM_full;
+    
+    const cg_empty_el = document.getElementById('cg_empty');
+    if (cg_empty_el) cg_empty_el.textContent = r.CG_empty;
+    
+    const sm_empty_el = document.getElementById('sm_empty');
+    if (sm_empty_el) sm_empty_el.textContent = r.SM_empty;
+    
+    // ★★★ 推奨紙粘土の表示 (シミュレーションモードのみ) ★★★
+    const ballast_out_el = document.getElementById('ballast_out');
+    if (ballast_out_el) {
+        // このDOM要素はシミュレーションモードでしか表示されないが、念のため更新
+        ballast_out_el.textContent = `推奨紙粘土: ${r.m_ballast > 90000 ? '計算不能' : r.m_ballast + ' g'}`;
+    }
+    
+ // --- ★★★ 新ロジック： 警告とタブの制御 ★★★ ---
+    
+    // 安定性チェック (シミュレーションモード用)
+    const isStable = workshopMode || (r.SM_full >= 0.8 && r.SM_empty >= 0.8 && r.m_ballast < 90000);
+    
+    const paraTabBtn = document.getElementById('para-tab-button');
+    const flightTabBtn = document.getElementById('flight-tab-button');
+    const statusBox = document.getElementById('status-box');
+    
+    // タブの有効化制御
+    if (paraTabBtn) paraTabBtn.disabled = !isStable;
+    if (flightTabBtn) flightTabBtn.disabled = !isStable;
+
+    if (statusBox) {
+        statusBox.style.display = 'block'; // 常に表示する
+        const statusText = document.getElementById('status-text');
+        const statusNote = document.getElementById('status-note');
+        
+        // ★ 評価に使うSM値（水素の場合は水がないのでSM_fullとSM_emptyは同じ値）
+        const currentSM = r.SM_full;
+
+        if (workshopMode) {
+            // ==========================================
+            // ▼ ワークショップモード：顔文字フィードバック ▼
+            // ==========================================
+            // 合格ライン（ペットボトルは0.8、水素は工作誤差を考慮して1.0）
+            const minSafeSM = (rocketType === 'pet') ? 0.8 : 1.0;
+            const overSM = 2.0; // これ以上は重すぎて飛ばないライン
+
+            if (statusText && statusNote) {
+                // 文字サイズを少し大きくして見やすくする
+                statusText.style.fontSize = '1.3em';
+                
+                if (currentSM < 0.5) {
+                    statusText.innerHTML = '😨 不安定です';
+                    statusNote.textContent = 'このままじゃくるくる回っちゃう！紙粘土をもっと増やそう！';
+                    statusBox.style.backgroundColor = "#ffebee";
+                    statusBox.style.color = "#c62828";
+                } else if (currentSM < minSafeSM) {
+                    statusText.innerHTML = '🫤 あと少し！';
+                    statusNote.textContent = 'もうちょっと重心（●）を前によせよう。';
+                    statusBox.style.backgroundColor = "#fff3e0";
+                    statusBox.style.color = "#e65100";
+                } else if (currentSM <= overSM) {
+                    statusText.innerHTML = '😆 バッチリ！';
+                    statusNote.textContent = '理想のバランスです！';
+                    statusBox.style.backgroundColor = "#e8f5e9";
+                    statusBox.style.color = "#2e7d32";
+                } else {
+                    statusText.innerHTML = '😅 重すぎ？';
+                    statusNote.textContent = '安定感は抜群だけど、重くて高く飛ばないかも。';
+                    statusBox.style.backgroundColor = "#e3f2fd";
+                    statusBox.style.color = "#1565c0";
+                }
+            }
+        } else {
+            // ==========================================
+            // ▼ シミュレーションモード：工学的なフィードバック ▼
+            // ==========================================
+            if (statusText && statusNote) {
+                statusText.style.fontSize = '1em'; // 文字サイズを元に戻す
+
+                if (isStable) {
+                    statusText.textContent = '✅ 安定性OK';
+                    statusNote.textContent = '上部のタブから次の設計に進めます。';
+                    statusBox.style.backgroundColor = "#e8f5e9";
+                    statusBox.style.color = "#2e7d32";
+                } else {
+                    statusText.textContent = '⚠️ 静安定不足';
+                    let note = 'パラメータを調整してください。';
+                    if (r.m_ballast > 90000) {
+                        note = '計算不能: 目標SMが高すぎます。目標SMを下げてください。';
+                    } else if (r.SM_full < 0.8 || r.SM_empty < 0.8) {
+                        note = 'SMが0.8を下回っています。目標SMを0.8以上に上げてください。';
+                    }
+                    statusNote.textContent = note;
+                    statusBox.style.backgroundColor = "#ffebee";
+                    statusBox.style.color = "#c62828";
+                }
+            }
+        }
+    }
+    
+    // 推奨紙粘土の色付け (シミュレーションモードのみ)
+    if (ballast_out_el) {
+        if (!workshopMode) {
+            ballast_out_el.style.display = 'block';
+            if (isStable) { ballast_out_el.style.backgroundColor = "#e8f5e9"; ballast_out_el.style.color = "#2e7d32"; }
+            else { ballast_out_el.style.backgroundColor = "#ffebee"; ballast_out_el.style.color = "#c62828"; }
+        } else {
+            ballast_out_el.style.display = 'none';
+        }
+    }
+}
+
+// --- フライトシミュレーター ---
+async function runFlightSimulation() {
+    if (!py || !lastResult) return;
+    const runBtn = document.getElementById('run-flight-sim');
+    runBtn.disabled = true;
+    runBtn.textContent = '計算中...';
+    
+    // グラフ表示エリアをクリア
+    const plotContainer = document.getElementById('flight-plot-container');
+    plotContainer.innerHTML = '';
+
+    const flightParams = {
+        P0_atm: parseFloat(document.getElementById('flight_pressure').value),
+        d_noz_mm: parseFloat(document.getElementById('flight_d_noz').value),
+        m_dry_g: lastResult.M_empty,
+        d_body_mm: parseFloat(document.getElementById('diam').value),
+        Vw0_ml: (rocketType === 'pet') ? parseFloat(document.getElementById('vwater').value) : 0, // ★ 水素モード対応
+        l_body_mm: parseFloat(document.getElementById('lbody').value)
+    };
+
+    try {
+        const results = (await py.globals.get('run_flight_simulation')(py.toPy(flightParams))).toJs({ deep_parse: true });
+
+        document.getElementById('max_h_out').textContent = results.max_h.toFixed(2);
+        document.getElementById('max_v_out').textContent = results.max_v.toFixed(2);
+        document.getElementById('max_f_out').textContent = results.max_F.toFixed(2);
+        document.getElementById('t_water_out').textContent = results.t_water_jet.toFixed(3);
+
+        const img_data = py.FS.readFile(results.plot_path, { encoding: 'binary' });
+        const blob = new Blob([img_data], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.src = url;
+        img.style.width = '100%';
+        plotContainer.appendChild(img);
+
+    } catch (e) {
+        console.error("フライトシミュレーションでエラー:", e);
+        plotContainer.textContent = "シミュレーションの実行中にエラーが発生しました。";
+    } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = 'シミュレーション実行';
+    }
+}
+
+function prepareParachuteData() {
+    if (!lastResult) return;
+    document.getElementById('para_mass_out').value = lastResult.M_empty;
+    updateParachute();
+}
+
+// --- パラシュート設計シミュレーター ---
+function updateParachute() {
+    const mass_out_el = document.getElementById('para_mass_out');
+    const v_down_el = document.getElementById('para_vdown');
+    const cdp_el = document.getElementById('para_cdp');
+    if (!mass_out_el || !v_down_el || !cdp_el) {
+        console.error('Parachute elements not found.');
+        return;
+    }
+
+    const m_g = parseFloat(mass_out_el.value);
+    if (isNaN(m_g)) return;
+    const m_kg = m_g / 1000.0;
+    const v_down = parseFloat(v_down_el.value);
+    const cdp = parseFloat(cdp_el.value);
+    const g = 9.8;
+    const rho_air = 1.225; // 修正済みの空気密度
+    const sp = (2 * m_kg * g) / (rho_air * cdp * v_down**2);
+    const dp = Math.sqrt((4 * sp) / Math.PI);
+    const dp0 = dp / 0.7;
+    const lp_hex = Math.sqrt((Math.PI * (dp0/2)**2) / (3 * Math.sqrt(3) / 2));
+    const lp_sq = (dp0 * Math.sqrt(Math.PI)) / 2;
+    const lsl = dp0 * 1.5;
+    document.getElementById('sp_out').textContent = sp.toFixed(3);
+    document.getElementById('dp_out').textContent = (dp * 100).toFixed(1);
+    document.getElementById('dp0_out').textContent = (dp0 * 100).toFixed(1);
+    document.getElementById('lph_out').textContent = (lp_hex * 100).toFixed(1);
+    document.getElementById('lps_out').textContent = (lp_sq * 100).toFixed(1);
+    document.getElementById('lsl_out').textContent = (lsl * 100).toFixed(1);
+    drawParachute(dp0 * 100, lsl * 100, lp_hex * 100);
+}
+
+function drawParachute(dp0_cm, lsl_cm, lp_hex_cm) {
+    const svg = document.getElementById('parachute-canvas');
+    if (!svg) return;
+    svg.innerHTML = '';
+    const width = svg.clientWidth;
+    if (width === 0) return;
+    const height = width;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const centerX = width / 2;
+    const centerY = height / 2 * 0.8;
+    const scale = width / ((dp0_cm + lsl_cm) * 1.1);
+    const r = (dp0_cm / 2) * scale;
+    let points = '';
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i - 30);
+        const x = centerX + r * Math.cos(angle);
+        const y = centerY + r * Math.sin(angle);
+        points += `${x},${y} `;
+    }
+    const hex = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    hex.setAttribute('points', points);
+    hex.setAttribute('fill', 'rgba(139, 195, 74, 0.2)');
+    hex.setAttribute('stroke', '#8BC34A');
+    hex.setAttribute('stroke-width', 2);
+    svg.appendChild(hex);
+    const lineY_end = centerY + r + lsl_cm * scale;
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i - 30);
+        const x_start = centerX + r * Math.cos(angle);
+        const y_start = centerY + r * Math.sin(angle);
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute('x1', x_start);
+        line.setAttribute('y1', y_start);
+        line.setAttribute('x2', centerX);
+        line.setAttribute('y2', lineY_end);
+        line.setAttribute('stroke', '#9E9E9E');
+        line.setAttribute('stroke-width', 1);
+        svg.appendChild(line);
+    }
+    createDimensionLine(svg, centerX - r, centerY, centerX + r, centerY, `布直径 Dp0: ${dp0_cm.toFixed(0)} cm`, false, {yOffset: -r - 15});
+    createDimensionLine(svg, centerX, centerY + r, centerX, lineY_end, `ライン長 Lsl: ${lsl_cm.toFixed(0)} cm`, true, {xOffset: r + 15});
+}
+
+
+// --- 描画 & 補助関数 ---
+function createDimensionLine(svg, x1, y1, x2, y2, text, isVertical, options = {}) {
+    const {xOffset = 20, yOffset = 20} = options;
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const textOffset = 5;
+    const tickSize = 3;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    line.setAttribute('stroke', 'var(--dim-color)');
+    line.setAttribute('stroke-width', 0.5);
+    line.setAttribute('fill', 'none');
+    const textElem = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    textElem.textContent = text;
+    textElem.setAttribute('fill', 'var(--dim-color)');
+    textElem.setAttribute('font-family', 'sans-serif');
+    textElem.setAttribute('font-size', '12px');
+    textElem.setAttribute('text-anchor', 'middle');
+    if (isVertical) {
+        const lineX = x1 + xOffset;
+        line.setAttribute('d', `M ${x1} ${y1 - tickSize} L ${x1} ${y1 + tickSize} M ${x1} ${y1} L ${lineX} ${y1} L ${lineX} ${y2} L ${x2} ${y2} M ${x2} ${y2 - tickSize} L ${x2} ${y2 + tickSize}`);
+        textElem.setAttribute('x', lineX + textOffset);
+        textElem.setAttribute('y', (y1 + y2) / 2);
+        textElem.setAttribute('alignment-baseline', 'middle');
+        textElem.setAttribute('writing-mode', 'vertical-rl');
+    } else { // Horizontal
+        const lineY = y1 + yOffset;
+        line.setAttribute('d', `M ${x1} ${y1 - tickSize} L ${x1} ${y1 + tickSize} M ${x1} ${y1} L ${x1} ${lineY} L ${x2} ${lineY} L ${x2} ${y2} M ${x2} ${y2 - tickSize} L ${x2} ${y2 + tickSize}`);
+        textElem.setAttribute('x', (x1 + x2) / 2);
+        textElem.setAttribute('y', lineY - textOffset);
+    }
+    g.appendChild(line);
+    g.appendChild(textElem);
+    svg.appendChild(g);
+}
+
+
+function drawRocket3D(params, results) {
+    if (!scene || !rocketModel) return; 
+
+    // 0. 既存のモデルをクリア
+    while(rocketModel.children.length > 0){ 
+        const child = rocketModel.children[0];
+        rocketModel.remove(child); 
+        
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => m.dispose());
+            } else {
+                child.material.dispose();
+            }
+        }
+    }
+
+    // 1. 共通パラメータ取得
+    const pLnose = params.Lnose || 80;
+    const pCr = params.Cr || 100;
+    const pS = params.S || 80;
+    const pSweep = params.Sweep || 10;
+    const pFinPos = params.FinPos || 20;
+    const pNfin = params.Nfin || 4; 
+
+    // カラーピッカーから色を取得（水素のノーズはCADに合わせて黄色っぽくしたい場合、画面UIで変更可能）
+    const colorNose = document.getElementById('color-nose')?.value || '#e0e0e0';
+    const colorBody = document.getElementById('color-body')?.value || '#d8d8d8';
+    const colorFin = document.getElementById('color-fin')?.value || '#bdbdbd';
+
+    const rCt = results.Ct !== undefined ? results.Ct : (pCr - pS * Math.tan(pSweep * Math.PI / 180));
+
+    // マテリアル定義
+    const noseMaterial = new THREE.MeshStandardMaterial({ color: colorNose, roughness: 0.5 });
+    const bodyMaterialDry = new THREE.MeshStandardMaterial({ color: colorBody, roughness: 0.3, metalness: 0.1, transparent: true, opacity: 0.2 });
+    const bodyMaterialWet = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.5, metalness: 0.1 });
+    const bodyMaterialSolid = new THREE.MeshStandardMaterial({ color: colorBody, roughness: 0.3, metalness: 0.1 }); // 水素用の不透明グレー
+    const transMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.7 }); // 黒パーツ用
+    const finMaterial = new THREE.MeshStandardMaterial({ color: colorFin, roughness: 0.8 });
+    const cgMaterial = new THREE.MeshBasicMaterial({ color: 'var(--cg-color)', depthTest: false });
+    const cpMaterial = new THREE.MeshBasicMaterial({ color: 'var(--cp-color)', depthTest: false });
+
+    let totalLength = 0;
+    let tipY = 0;
+    let baseY = 0;
+    let fin_base_radius = 0;
+
+    // ==========================================
+    // ▼ モードごとの機体描画 ▼
+    // ==========================================
+    if (rocketType === 'pet') {
+        const pLbody = params.Lbody || 220;
+        const pD = params.D || 66;
+        const pVw = params.Vw || 400;
+
+        totalLength = pLnose + pLbody;
+        tipY = totalLength / 2.0;
+        baseY = -totalLength / 2.0;
+        fin_base_radius = pD / 2.0;
+        const noseBaseY = tipY - pLnose;
+
+        // ノーズ
+        const noseGeom = new THREE.ConeGeometry(fin_base_radius, pLnose, 32);
+        noseGeom.translate(0, tipY - (pLnose / 2.0), 0); 
+        rocketModel.add(new THREE.Mesh(noseGeom, noseMaterial));
+
+        // 水と胴体の高さ計算
+        const bottle_area_mm2 = Math.PI * fin_base_radius**2;
+        let water_height_mm = (pVw * 1000) / (bottle_area_mm2 > 0 ? bottle_area_mm2 : 1);
+        if (water_height_mm < 0) water_height_mm = 0;
+        if (water_height_mm > pLbody) water_height_mm = pLbody;
+        const dry_height_mm = pLbody - water_height_mm;
+
+        // 胴体（乾）
+        if (dry_height_mm > 0.1) {
+            const dryBodyGeom = new THREE.CylinderGeometry(fin_base_radius, fin_base_radius, dry_height_mm, 32);
+            dryBodyGeom.translate(0, noseBaseY - (dry_height_mm / 2.0), 0); 
+            rocketModel.add(new THREE.Mesh(dryBodyGeom, bodyMaterialDry));
+        }
+        // 胴体（水）
+        if (water_height_mm > 0.1) {
+            const wetBodyGeom = new THREE.CylinderGeometry(fin_base_radius, fin_base_radius, water_height_mm, 32);
+            wetBodyGeom.translate(0, baseY + (water_height_mm / 2.0), 0);
+            rocketModel.add(new THREE.Mesh(wetBodyGeom, bodyMaterialWet));
+        }
+
+    } else {
+        // --- 水素ロケット（CAD形状の再現） ---
+        const pD_up = params.D_up || 11;
+        const pL_up = params.L_up || 100;
+        const pL_trans = params.L_trans || 5;
+        const pD_low = params.D_low || 16;
+        const pL_low = params.L_low || 150;
+
+        totalLength = pLnose + pL_up + pL_trans + pL_low;
+        tipY = totalLength / 2.0;
+        baseY = -totalLength / 2.0;
+        
+        const r_up = pD_up / 2.0;
+        const r_low = pD_low / 2.0;
+        fin_base_radius = r_low; // フィンは一番太い下部筒につく
+
+        let currentY = baseY;
+
+        // 下部筒
+        const lowGeom = new THREE.CylinderGeometry(r_low, r_low, pL_low, 32);
+        lowGeom.translate(0, currentY + pL_low / 2.0, 0);
+        rocketModel.add(new THREE.Mesh(lowGeom, bodyMaterialSolid));
+        currentY += pL_low;
+
+        // 黒パーツ（下から上に向かって細くなるテーパー形状）
+        const transGeom = new THREE.CylinderGeometry(r_up, r_low, pL_trans, 32);
+        transGeom.translate(0, currentY + pL_trans / 2.0, 0);
+        rocketModel.add(new THREE.Mesh(transGeom, transMaterial));
+        currentY += pL_trans;
+
+        // 上部筒
+        const upGeom = new THREE.CylinderGeometry(r_up, r_up, pL_up, 32);
+        upGeom.translate(0, currentY + pL_up / 2.0, 0);
+        rocketModel.add(new THREE.Mesh(upGeom, bodyMaterialSolid));
+        currentY += pL_up;
+
+        // ノーズ
+        const noseGeom = new THREE.ConeGeometry(r_up, pLnose, 32);
+        noseGeom.translate(0, currentY + pLnose / 2.0, 0);
+        rocketModel.add(new THREE.Mesh(noseGeom, noseMaterial));
+    }
+
+    // ==========================================
+    // ▼ フィン描画 (共通) ▼
+    // ==========================================
+    const finShape = new THREE.Shape();
+    const fin_root_le_y = baseY + pFinPos + pCr;
+    const fin_root_te_y = baseY + pFinPos;
+    const le_sweep_dist = pS * Math.tan(pSweep * Math.PI / 180);
+    const fin_tip_le_y = fin_root_le_y - le_sweep_dist; 
+    const fin_tip_te_y = fin_tip_le_y - rCt;
+
+    finShape.moveTo(fin_base_radius, fin_root_le_y);
+    finShape.lineTo(fin_base_radius, fin_root_te_y);
+    finShape.lineTo(fin_base_radius + pS, fin_tip_te_y);
+    finShape.lineTo(fin_base_radius + pS, fin_tip_le_y);
+    finShape.lineTo(fin_base_radius, fin_root_le_y);
+
+    const finExtrudeSettings = { steps: 1, depth: 2, bevelEnabled: false };
+    const finGeom = new THREE.ExtrudeGeometry(finShape, finExtrudeSettings);
+    finGeom.translate(0, 0, -1); 
+    
+    for (let i = 0; i < pNfin; i++) {
+        const finMesh = new THREE.Mesh(finGeom.clone(), finMaterial); 
+        const angle = (Math.PI * 2 / pNfin) * i;
+        finMesh.rotation.y = angle;
+        rocketModel.add(finMesh);
+    }
+
+    // ==========================================
+    // ▼ CG / CP マーカー描画 ▼
+    // ==========================================
+    const rCG_full = results.CG_full || (pLnose + totalLength * 0.3);
+    const rCG_empty = results.CG_empty || (pLnose + totalLength * 0.4);
+    const rCP = results.CP || (pLnose + totalLength * 0.7);
+
+    const cgFull_Y = tipY - rCG_full;
+    const cgEmpty_Y = tipY - rCG_empty;
+    const cp_Y = tipY - rCP;
+    
+    // スケールが極端に変わるため、マーカーのサイズは機体全長から算出
+    const markerRadius = totalLength * 0.015;
+    
+    // CG (満水 / 計算値) - ●
+    const cgFullGeom = new THREE.SphereGeometry(markerRadius, 16, 16);
+    const cgFullMesh = new THREE.Mesh(cgFullGeom, cgMaterial);
+    cgFullMesh.position.y = cgFull_Y; 
+    cgFullMesh.renderOrder = 1; 
+    rocketModel.add(cgFullMesh);
+    
+    // CG (空) - ○ （※ペットボトルモードのみ描画）
+    if (rocketType === 'pet') {
+        const cgEmptyGeom = new THREE.TorusGeometry(markerRadius * 0.8, markerRadius * 0.2, 8, 24);
+        const cgEmptyMesh = new THREE.Mesh(cgEmptyGeom, cgMaterial);
+        cgEmptyMesh.position.y = cgEmpty_Y; 
+        cgEmptyMesh.rotation.x = Math.PI / 2; 
+        cgEmptyMesh.renderOrder = 1;
+        rocketModel.add(cgEmptyMesh);
+    }
+
+    // CP (+)
+    const cpGeomH = new THREE.BoxGeometry(markerRadius * 2.2, markerRadius * 0.3, markerRadius * 0.3);
+    const cpMeshH = new THREE.Mesh(cpGeomH, cpMaterial);
+    cpMeshH.position.y = cp_Y; 
+    cpMeshH.renderOrder = 1;
+    rocketModel.add(cpMeshH);
+    
+    const cpGeomV = new THREE.BoxGeometry(markerRadius * 0.3, markerRadius * 2.2, markerRadius * 0.3);
+    const cpMeshV = new THREE.Mesh(cpGeomV, cpMaterial);
+    cpMeshV.position.y = cp_Y; 
+    cpMeshV.renderOrder = 1;
+    rocketModel.add(cpMeshV);
+}
+// --- プリセット機能 ---
+const keyMap = {
+    diam: 'D', lbody: 'Lbody', lnose: 'Lnose', wnose: 'Wnose', wbody: 'Wbody', vwater: 'Vw',
+    c_root: 'Cr', span: 'S', sweep: 'Sweep',
+    nfin: 'Nfin', mfin: 'Mfin', finpos: 'FinPos', sm_target: 'SM_t',
+    // --- 水素ロケット用に追加 ---
+    d_upper: 'D_up', l_upper: 'L_up', l_trans: 'L_trans', d_lower: 'D_low', l_lower: 'L_low', w_h2_body: 'W_h2'
+};
+
+function getStabParamsFromUI(){
+  const params = {};
+  try{
+    const ws = document.getElementById('workshop_mode');
+    const selType = document.getElementById('rocket_type');
+    const isWS = ws ? !!ws.checked : false; // workshopMode と同じ
+    const rType = selType && selType.value ? selType.value : 'pet';
+
+    stabParamIds.forEach(id => {
+      // ★★★ モードに応じてスキップ ★★★
+      if (id === 'sm_target' && isWS) return; // WSモードでは目標SMを送らない
+
+      const key = Object.keys(keyMap).find(k => k === id);
+      if (!key) return;
+
+      const el = document.getElementById(id);
+      if (!el || (el.value === undefined)) return;
+
+      let v = Number(el.value);
+      if (!Number.isFinite(v)) {
+        try { v = parseFloat(String(el.value).replace(/,/g,'')); } catch(e){ v = NaN; }
+      }
+      if (!Number.isFinite(v)) return;
+
+      params[keyMap[key]] = v;
+    });
+    
+    // ★★★ モードに応じて紙粘土(W_ballast_ws)を送る ★★★
+    if (isWS) {
+        // ワークショップモードの時だけ、紙粘土の値を送る
+        const wsBallastEl = document.getElementById('ws_ballast');
+        if (wsBallastEl) {
+            params['W_ballast_ws'] = +wsBallastEl.value || 0;
+        }
+    }
+    // (シミュレーションモードでは sm_target が送られ、W_ballast_ws は送られない)
+
+  }catch(e){
+    console.warn('getStabParamsFromUI error', e);
+  }
+  return params;
+}
+function savePreset() {
+    const nameInput = document.getElementById('preset-name');
+    let name = nameInput.value.trim();
+    const presets = getPresets();
+    if (!name) name = `設計 ${presets.length + 1}`;
+    
+    const presetData = {};
+    
+    // 1. 全スライダーの数値を保存
+    stabParamIds.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) presetData[id] = +el.value;
+    });
+    
+    // ★ 2. 現在のモード（ペットボトル or 水素）を保存
+    presetData['mode'] = rocketType;
+    
+    // ★ 3. 機体の色を保存
+    presetData['color-nose'] = document.getElementById('color-nose')?.value || '#e0e0e0';
+    presetData['color-body'] = document.getElementById('color-body')?.value || '#d8d8d8';
+    presetData['color-fin'] = document.getElementById('color-fin')?.value || '#bdbdbd';
+
+    presets.push({ name: name, params: presetData });
+    localStorage.setItem('rocketPresets', JSON.stringify(presets));
+    nameInput.value = '';
+    renderPresets();
+}
+
+function loadPreset(index) {
+    const presets = getPresets();
+    if (presets[index]) {
+        const paramsToLoad = presets[index].params;
+
+        // ★ 1. まずモード（ペットボトル or 水素）を復元してUIを切り替える
+        if (paramsToLoad['mode']) {
+            const selType = document.getElementById('rocket_type');
+            const btnPet = document.getElementById('btn-type-pet');
+            const btnH2 = document.getElementById('btn-type-h2');
+            
+            if (selType) selType.value = paramsToLoad['mode'];
+            
+            // UIのボタントグル（見た目）も合わせる
+            if (paramsToLoad['mode'] === 'pet') {
+                if (btnPet) { btnPet.classList.add('on'); btnPet.setAttribute('aria-pressed', 'true'); }
+                if (btnH2) { btnH2.classList.remove('on'); btnH2.setAttribute('aria-pressed', 'false'); }
+            } else {
+                if (btnH2) { btnH2.classList.add('on'); btnH2.setAttribute('aria-pressed', 'true'); }
+                if (btnPet) { btnPet.classList.remove('on'); btnPet.setAttribute('aria-pressed', 'false'); }
+            }
+            
+            // モード切り替え処理を実行（ここで入力欄の表示/非表示が切り替わる）
+            onModeChanged();
+        }
+
+        // ★ 2. パラメータの数値を復元
+        stabParamIds.forEach(id => {
+            const inputElem = document.getElementById(id);
+            if (inputElem && paramsToLoad[id] !== undefined) {
+                inputElem.value = paramsToLoad[id];
+                // 横の数値入力ボックス（input または output）も更新
+                if(inputElem.nextElementSibling && (inputElem.nextElementSibling.tagName === 'INPUT' || inputElem.nextElementSibling.tagName === 'OUTPUT')) {
+                    inputElem.nextElementSibling.value = paramsToLoad[id];
+                }
+            }
+        });
+        
+        // ★ 3. 共有パラメータ（ノーズやフィン）の状態を上書き
+        // （次にモードを切り替えた時に、ロードした値がちゃんと記憶されるようにするため）
+        sharedParamIds.forEach(id => {
+            if (paramsToLoad[id] !== undefined && sharedParamStates[rocketType]) {
+                sharedParamStates[rocketType][id] = paramsToLoad[id];
+            }
+        });
+
+        // ★ 4. 色を復元
+        const cNose = document.getElementById('color-nose');
+        const cBody = document.getElementById('color-body');
+        const cFin = document.getElementById('color-fin');
+        if (cNose && paramsToLoad['color-nose']) cNose.value = paramsToLoad['color-nose'];
+        if (cBody && paramsToLoad['color-body']) cBody.value = paramsToLoad['color-body'];
+        if (cFin && paramsToLoad['color-fin']) cFin.value = paramsToLoad['color-fin'];
+
+        // ★ 5. 再計算と3D描画を実行
+        updateStability();
+    }
+}
+function deletePreset(index) {
+    let presets = getPresets();
+    presets.splice(index, 1);
+    localStorage.setItem('rocketPresets', JSON.stringify(presets));
+    renderPresets();
+}
+function getPresets() { return JSON.parse(localStorage.getItem('rocketPresets') || '[]'); }
+function renderPresets() {
+    const list = document.getElementById('preset-list');
+    if (!list) return;
+    const presets = getPresets();
+    list.innerHTML = '';
+    presets.forEach((preset, index) => {
+        const li = document.createElement('li');
+        
+        // ★ モードに応じたバッジ（目印）のHTMLを作成
+        const mode = preset.params.mode || 'pet'; // 古いデータがない場合はpetとみなす
+        let badgeHtml = '';
+        if (mode === 'pet') {
+            // ペットボトル用は青色の「💧 PET」バッジ
+            badgeHtml = '<span style="background-color: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px; font-weight: bold;">PET</span>';
+        } else if (mode === 'hydrogen') {
+            // 水素ロケット用はオレンジ色の「⚡ 水素」バッジ
+            badgeHtml = '<span style="background-color: #fff3e0; color: #e65100; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-right: 8px; font-weight: bold;">水素</span>';
+        }
+
+        li.innerHTML = `
+            <div style="display: flex; align-items: center;">
+                ${badgeHtml}
+                <span>${preset.name}</span>
+            </div>
+            <div>
+                <button class="btn-load" onclick="loadPreset(${index})">読込</button>
+                <button class="btn-delete" onclick="deletePreset(${index})">削除</button>
+            </div>
+        `;
+        list.appendChild(li);
+    });
+}
+
+function initToggles(){
+  var selType = document.getElementById('rocket_type'); var ws = document.getElementById('workshop_mode');
+  var btnWS = document.getElementById('btn-mode-workshop'), btnPro=document.getElementById('btn-mode-pro');
+  var btnPet = document.getElementById('btn-type-pet'), btnH2=document.getElementById('btn-type-h2');
+  if (btnWS) btnWS.onclick=function(){ if(selectionIsLocked) return; if(ws) ws.checked=true; onModeChanged(); };
+  if (btnPro) btnPro.onclick=function(){ if(selectionIsLocked) return; if(ws) ws.checked=false; onModeChanged(); };
+  if (btnPet) btnPet.onclick=function(){ if(selectionIsLocked) return; if(selType) selType.value='pet'; onModeChanged(); };
+  if (btnH2) btnH2.onclick=function(){ if(selectionIsLocked) return; if(selType) selType.value='hydrogen'; onModeChanged(); };
+}
+
+function lockSelection(){
+  selectionIsLocked = true;
+  var fs = document.getElementById('mode-fieldset'); if (fs) fs.style.display='none';
+  var backBtn = document.getElementById('back-to-wizard'); if (backBtn) backBtn.style.display='';
+  var pbtn = document.getElementById('para-tab-button'); if (pbtn) pbtn.disabled=false;
+  var fbtn = document.getElementById('flight-tab-button'); if (fbtn) fbtn.disabled=false;
+}
+
+function openWizardForReselect(){
+  var chkWS = document.getElementById('workshop_mode'); var selType = document.getElementById('rocket_type');
+  var overlay = document.createElement('div'); overlay.id='wizard';
+  overlay.setAttribute('style','position:fixed;inset:0;background:rgba(248,248,250,.92);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:9999;');
+  overlay.innerHTML = '<div class="sheet" style="background:#fff;border:1px solid #e5e5ea;border-radius:18px;padding:22px;max-width:560px;width:92%;box-shadow:0 20px 40px rgba(0,0,0,.08)">'+
+    '<h2 style="margin:.2rem 0 1rem 0">はじめに：<ruby>モード<rt>もーど</rt></ruby>を<ruby>選択<rt>せんたく</rt></ruby></h2>'+
+    '<div class="toggle-group"><button type="button" id="wiz-mode-ws" class="toggle">ワークショップ</button><button type="button" id="wiz-mode-pro" class="toggle">シミュレーション</button></div>'+
+    '<h3 style="margin:.5rem 0 .5rem 0;font-size:1rem;color:#1c1c1e;"><ruby>ロケット<rt>ろけっと</rt></ruby><ruby>種別<rt>しゅべつ</rt></ruby></h3>'+
+    '<div class="toggle-group"><button type="button" id="wiz-type-pet" class="toggle">ペットボトル</button><button type="button" id="wiz-type-h2" class="toggle"><ruby>水素<rt>すいそ</rt></ruby></button></div>'+
+    '<div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.2rem;"><button type="button" id="wiz-start" class="toggle on">スタート</button></div>'+
+  '</div>';
+  document.body.appendChild(overlay);
+  function setOn(a,b){ a.classList.add('on'); a.setAttribute('aria-pressed','true'); b.classList.remove('on'); b.setAttribute('aria-pressed','false'); }
+  var wsBtn=overlay.querySelector('#wiz-mode-ws'), proBtn=overlay.querySelector('#wiz-mode-pro');
+  var petBtn=overlay.querySelector('#wiz-type-pet'), h2Btn=overlay.querySelector('#wiz-type-h2');
+  if (chkWS && chkWS.checked) setOn(wsBtn, proBtn); else setOn(proBtn, wsBtn);
+  if (selType && selType.value==='pet') setOn(petBtn, h2Btn); else setOn(h2Btn, petBtn); // ★★★ 修正: hA2Btn -> h2Btn
+  wsBtn.onclick=function(){ if(chkWS) chkWS.checked=true; setOn(wsBtn,proBtn); };
+  proBtn.onclick=function(){ if(chkWS) chkWS.checked=false; setOn(proBtn,wsBtn); };
+  petBtn.onclick=function(){ if(selType) selType.value='pet'; setOn(petBtn,h2Btn); };
+  h2Btn.onclick=function(){ if(selType) selType.value='hydrogen'; setOn(h2Btn,petBtn); };
+  overlay.querySelector('#wiz-start').onclick=function(){ overlay.parentNode.removeChild(overlay); selectionIsLocked=false; lockSelection(); onModeChanged(); };
+}
+
+// ★★★ ここから教育機能のJavaScript ★★★
+const educationTerms = {
+    // ★★★ 修正点：ポップアップ内のテキストにもルビを追加 ★★★
+    'cg': {
+        title: '<ruby>重心<rt>じゅうしん</rt></ruby> (CG) とは？',
+        text: '<ruby>重心<rt>じゅうしん</rt></ruby>（Center of Gravity）は、ロケット<ruby>全体<rt>ぜんたい</rt></ruby>の「<ruby>重<rt>おも</rt></ruby>さの<ruby>中心<rt>ちゅうしん</rt></ruby>」です。シーソーのつりあう<ruby>点<rt>てん</rt></ruby>と<ruby>同<rt>おな</rt></ruby>じです。ロケットが<ruby>安定<rt>あんてい</rt></ruby>してまっすぐ<ruby>飛<rt>と</rt></ruby>ぶためには、この<ruby>重心<rt>じゅうしん</rt></ruby>(CG)の<ruby>位置<rt>いち</rt></ruby>が<ruby>非常<rt>ひじょう</rt></ruby>に<ruby>重要<rt>じゅうよう</rt></ruby>になります。'
+    },
+    'sm': {
+        title: '<ruby>静安定<rt>せいあんてい</rt></ruby><ruby>余裕<rt>よゆう</rt></ruby> (SM) とは？',
+        text: '<ruby>静安定<rt>せいあんてい</rt></ruby><ruby>余裕<rt>よゆう</rt></ruby>（Static Margin）は、ロケットがどれだけ<ruby>安定<rt>あんてい</rt></ruby>しているかを<ruby>示<rt>しめ</rt></ruby>す<ruby>数字<rt>すうじ</rt></ruby>です。この<ruby>数字<rt>すうじ</rt></ruby>が<ruby>大<rt>おお</rt></ruby>きいほど、ロケットは<ruby>風<rt>かぜ</rt></ruby>などを<ruby>受<rt>う</rt></ruby>けても<ruby>元<rt>もと</rt></ruby>のまっすぐな<ruby>姿勢<rt>しせい</rt></ruby>に<ruby>戻<rt>もど</rt></ruby>ろうとする<ruby>力<rt>ちから</rt></ruby>が<ruby>強<rt>つよ</rt></ruby>くなります。<ruby>安全<rt>あんぜん</rt></ruby>に<ruby>飛<rt>と</rt></ruby>ばすためには、この<ruby>値<rt>あたい</rt></ruby>が 0.8 <ruby>以上<rt>いじょう</rt></ruby>（できれば 1.0～2.0 の<ruby>間<rt>あいだ</rt></ruby>）になるように<ruby>設計<rt>せっけい</rt></ruby>するのが<ruby>一般<rt>いっぱん</rt></ruby><ruby>的<rt>てき</rt></ruby>です。'
+    },
+    'cp': {
+        title: '<ruby>空力<rt>くうりき</rt></ruby><ruby>中心<rt>ちゅうしん</rt></ruby> (CP) とは？',
+        text: '<ruby>空力<rt>くうりき</rt></ruby><ruby>中心<rt>ちゅうしん</rt></ruby>（Center of Pressure）は、ロケットが<ruby>飛<rt>と</rt></ruby>んでいるときに<ruby>空気<rt>くうき</rt></ruby>から<ruby>受<rt>う</rt></ruby>ける<ruby>力<rt>ちから</rt></ruby>（<ruby>風<rt>かぜ</rt></ruby>の<ruby>力<rt>ちから</rt></ruby>）の「<ruby>中心点<rt>ちゅうしんてん</rt></ruby>」です。ロケットを<ruby>安定<rt>あんてい</rt></ruby>させるには、この<ruby>空力<rt>くうりき</rt></ruby><ruby>中心<rt>ちゅうしん</rt></ruby>(CP)が、<ruby>必<rt>かなら</rt></ruby>ず<ruby>重心<rt>じゅうしん</rt></ruby>(CG)よりも<ruby>後<rt>うし</rt></ruby>ろになければなりません。'
+    },
+    'sm_target': {
+        title: '<ruby>安定性<rt>あんていせい</rt></ruby><ruby>目標<rt>もくひょう</rt></ruby> とは？',
+        text: 'シミュレーションモードでは、「ロケットの<ruby>安定性<rt>あんていせい</rt></ruby>をこの<ruby>数字<rt>すうじ</rt></ruby>にしたい」という<ruby>目標<rt>もくひょう</rt></ruby><ruby>値<rt>ち</rt></ruby>を<ruby>設定<rt>せってい</rt></ruby>できます。この<ruby>目標<rt>もくひょう</rt></ruby>SMを<ruby>達成<rt>たっせい</rt></ruby>するために<ruby>必要<rt>ひつよう</rt></ruby>な「<ruby>推奨<rt>すいしょう</rt></ruby><ruby>紙粘土<rt>かみねんど</rt></ruby>（バラスト）<ruby>量<rt>りょう</rt></ruby>」が<ruby>自動<rt>じどう</rt></ruby>で<ruby>計算<rt>けいさん</rt></ruby>されます。'
+    },
+    'cdp': {
+        title: '<ruby>抗力<rt>こうりょく</rt></ruby><ruby>係数<rt>けいすう</rt></ruby> (Cdp) とは？',
+        text: 'パラシュートが<ruby>空気<rt>くうき</rt></ruby>からどれだけの<ruby>抵抗<rt>ていこう</rt></ruby>を<ruby>受<rt>う</rt></ruby>けるかを<ruby>示<rt>しめ</rt></ruby>す<ruby>数字<rt>すうじ</rt></ruby>です。この<ruby>数字<rt>すうじ</rt></ruby>が<ruby>大<rt>おお</rt></ruby>きいほど、<ruby>空気<rt>くうき</rt></ruby><ruby>抵抗<rt>ていこう</rt></ruby>が<ruby>大<rt>おお</rt></ruby>きく、ゆっくりと<ruby>降下<rt>こうか</rt></ruby>します。<ruby>一般<rt>いっぱん</rt></ruby><ruby>的<rt>てき</rt></ruby>な<ruby>半球<rt>はんきゅう</rt></ruby><ruby>形<rt>けい</rt></ruby>のパラシュートでは 0.75 <ruby>程度<rt>ていど</rt></ruby>とされています。'
+    }
+    
+};
+// ★★★ 3Dシーンのグローバル変数 ★★★
+let scene, camera, renderer, controls, rocketModel;
+// 3Dの「三種の神器」と操作機能、ロケット本体を保持する変数だ
+// ★★★ rocketModelはロケット全体を保持するグループとして初期化 ★★★
+rocketModel = new THREE.Group();
+
+function init3DScene() {
+    console.log("Initializing 3D Scene...");
+    
+    // 1. シーン（仮想空間）
+    scene = new THREE.Scene();
+    // ★★★ 修正点（白飛び対策） ★★★
+    // 背景をCSSの背景色(0xcccccc)に合わせる
+    scene.background = new THREE.Color(0xcccccc); 
+
+    const canvas = document.getElementById('rocket-canvas');
+    if (!canvas) {
+        console.error("3D Canvas not found!");
+        return;
+    }
+
+    // 2. カメラ（どこから見るか）
+    camera = new THREE.PerspectiveCamera(
+        50, // 視野角
+        canvas.clientWidth / canvas.clientHeight, // アスペクト比
+        0.1,  // 描画する一番近い距離
+        10000 // 描画距離
+    );
+    // ★★★ 修正点（カメラリセット対策） ★★★
+    // 古いカメラ位置設定 (set(200, 200, 350) と lookAt) を削除
+
+    // 3. レンダラー（何に描き出すか）
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); // antialias: trueで滑らかに
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio); // 高解像度ディスプレイ対応
+
+    // --- ライト（光源）の追加 ---
+    // ★★★ 修正点（白飛び対策） ★★★
+    const hemisphereLight = new THREE.HemisphereLight( 0xffffff, 0x888888, 1.0 ); // 空の色, 地面の色, 強さ
+    // ★★★ バグ修正 ★★★
+    // (誤) scene.add(ambientLight); -> (正) scene.add(hemisphereLight);
+    scene.add(hemisphereLight); 
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // 太陽光のような平行光
+    directionalLight.position.set(50, 100, 75); // 右上奥から照らす
+    scene.add(directionalLight);
+
+    // --- 操作機能（OrbitControls）の追加 ---
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    
+    // ★★★ 修正点（カメラリセット対策） ★★★
+    // カメラの初期位置とターゲット設定 (起動時に1回だけ実行)
+    controls.target.set(0, 0, 0);      // ロケットの中心 (Y=0) を見る
+    camera.position.set(250, 0, 300);  // 少し近めの位置からスタート
+    controls.update(); // 忘れずに update() を呼ぶ
+
+    // ★★★ ロケット全体を保持するグループをシーンに追加 ★★★
+    scene.add(rocketModel);
+
+    // --- アニメーションループを開始 ---
+    animate3D();
+    
+    // --- 画面リサイズへの対応 ---
+    window.addEventListener('resize', onWindowResize);
+}
+function animate3D() {
+    requestAnimationFrame(animate3D); // 毎フレーム呼び出す
+    controls.update(); // 操作を更新
+    renderer.render(scene, camera); // シーンを描画
+}
+
+function onWindowResize() {
+    const canvas = document.getElementById('rocket-canvas');
+    if (canvas && renderer && camera) {
+        // キャンバスの親要素のサイズに合わせる
+        const visualPanel = canvas.closest('.visual-panel'); // ★★★ 修正： .parentElement -> .closest()
+        if (visualPanel) {
+            const width = visualPanel.clientWidth - 32; // paddingを考慮
+            const height = 450; // CSSで指定した高さに合わせる
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+    }
+}
+
+
+function showEducationModal(event, termKey) {
+    const termData = educationTerms[termKey];
+    if (!termData) return;
+    
+    // 他のポップアップが開いていれば閉じる
+    closeEducationModal();
+    
+    const modal = document.getElementById('education-modal');
+    const modalContent = modal.querySelector('.modal-content');
+    
+    document.getElementById('modal-title').innerHTML = termData.title;
+    document.getElementById('modal-text').innerHTML = termData.text;
+    
+    // ★★★ [ここからロジック変更] ★★★
+    
+    // 1. 先に表示してサイズ（高さ・幅）を取得
+    modal.classList.add('visible');
+    const modalWidth = modalContent.offsetWidth;
+    const modalHeight = modalContent.offsetHeight;
+    const margin = 12; // アイコンと吹き出しの間の余白
+
+    // 2. アイコンの座標と、画面の空きスペースを計算
+    const rect = event.target.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom; // アイコンより下の空き
+    const spaceAbove = rect.top;                         // アイコンより上の空き
+
+    let top; // 最終的なY座標
+    modalContent.classList.remove('on-top'); // しっぽ反転クラスをリセット
+
+    // 3. 上下に表示するか判定
+    // 「下に表示する空きが足りない」かつ「上の方が空きが多い」場合
+    if (spaceBelow < (modalHeight + margin) && spaceAbove > spaceBelow) {
+        // --- 上に表示 ---
+        // アイコンの上端 - 自分の高さ - 余白
+        top = rect.top + window.scrollY - modalHeight - margin;
+        modalContent.classList.add('on-top'); // しっぽ反転クラスを付与
+    } else {
+        // --- 下に表示 (デフォルト) ---
+        // アイコンの下端 + 余白
+        top = rect.bottom + window.scrollY + margin;
+    }
+    
+    // 4. 左右の位置を計算（これは変更なし）
+    let left = rect.left + window.scrollX + (rect.width / 2) - (modalWidth / 2);
+    
+    // 画面の左端からはみ出ないように調整
+    if (left < 10) {
+        left = 10;
+    }
+    // 画面の右端からはみ出ないように調整
+    if (left + modalWidth > window.innerWidth - 10) {
+        left = window.innerWidth - modalWidth - 10;
+    }
+    
+    // 5. 最終的な座標を決定
+    modalContent.style.top = `${top}px`;
+    modalContent.style.left = `${left}px`;
+    // ★★★ [ここまでロジック変更] ★★★
+    
+    event.stopPropagation(); // 背景クリックが発火しないようにする
+}
+// ★★★ ここまで教育機能のJavaScript ★★★
+function closeEducationModal(event) {
+    // イベント（クリック）が .modal-content（吹き出し本体）の中で発生した場合は、閉じない
+    if (event && event.target.closest('.modal-content')) {
+        return; 
+    }
+    
+    // .modal-overlay（背景）から .visible クラスを削除して非表示にする
+    const modal = document.getElementById('education-modal');
+    if (modal) {
+        modal.classList.remove('visible');
+    }
+}
+
+</script>
+
+<script>
+function clampToRangeStep(value, min, max, step) {
+  let v = value;
+  if (Number.isFinite(min)) v = Math.max(min, v);
+  if (Number.isFinite(max)) v = Math.min(max, v);
+  if (Number.isFinite(step) && step > 0 && Number.isFinite(min)) {
+    const snapped = Math.round((v - min) / step) * step + min;
+    const decimals = (String(step).split('.')[1] || '').length;
+    v = Number(snapped.toFixed(decimals));
+    if (Number.isFinite(min)) v = Math.max(min, v);
+    if (Number.isFinite(max)) v = Math.min(max, v);
+  }
+  return v;
+}
+
+function clampToBounds(value, min, max) {
+  let v = value;
+  if (Number.isFinite(min)) v = Math.max(min, v);
+  if (Number.isFinite(max)) v = Math.min(max, v);
+  return v;
+}
+
+function enhanceRangeInputsWithNumberFields() {
+  document.querySelectorAll('input[type="range"]').forEach((range) => {
+    if (range.dataset.numberEnhanced === '1') return;
+    range.dataset.numberEnhanced = '1';
+
+    const number = document.createElement('input');
+    number.type = 'number';
+    number.className = 'range-number';
+    number.inputMode = 'decimal';
+    if (range.min !== '') number.min = range.min;
+    if (range.max !== '') number.max = range.max;
+    if (range.step !== '') number.step = range.step;
+    number.value = range.value;
+    number.setAttribute('aria-label', `${range.id || 'slider'} value`);
+    let suppressNumberSync = false;
+
+    const syncNumberFromRange = () => {
+      if (suppressNumberSync) return;
+      if (number.value !== range.value) number.value = range.value;
+    };
+
+    const applyNumberToRange = (commit) => {
+      const parsed = Number(number.value);
+      if (!Number.isFinite(parsed)) {
+        if (commit) syncNumberFromRange();
+        return;
+      }
+      const min = range.min === '' ? NaN : Number(range.min);
+      const max = range.max === '' ? NaN : Number(range.max);
+      const step = range.step === '' || range.step === 'any' ? NaN : Number(range.step);
+      const nextValue = commit
+        ? clampToRangeStep(parsed, min, max, step)
+        : clampToBounds(parsed, min, max);
+      range.value = String(nextValue);
+      if (commit) syncNumberFromRange();
+      if (!commit) suppressNumberSync = true;
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      if (!commit) suppressNumberSync = false;
+    };
+
+    range.addEventListener('input', syncNumberFromRange);
+    range.addEventListener('change', syncNumberFromRange);
+    number.addEventListener('input', () => applyNumberToRange(false));
+    number.addEventListener('change', () => applyNumberToRange(true));
+    number.addEventListener('blur', () => applyNumberToRange(true));
+
+    const nextElem = range.nextElementSibling;
+    // 横に <output> があれば、それを新しい入力ボックスに置き換える
+    if (nextElem && nextElem.tagName.toUpperCase() === 'OUTPUT') {
+      nextElem.replaceWith(number);
+    } else {
+      range.insertAdjacentElement('afterend', number);
+    }
+  });
+}
+
+// ★★★ 起動ロジック ★★★
+window.onload = function() {
+  enhanceRangeInputsWithNumberFields();
+  
+  // トグル（モード選択）の初期化
+  initToggles();
+  
+  // タブの有効化
+  var pbtn = document.getElementById('para-tab-button'); if (pbtn) pbtn.disabled=false;
+  var fbtn = document.getElementById('flight-tab-button'); if (fbtn) fbtn.disabled=false;
+  
+  // ★★★ 教育機能（？）アイコンのイベントリスナーをセット ★★★
+  // (HTMLのonclick属性で設定したため、ここでは不要)
+  
+  // Pyodideのロードを待機する処理
+  const loadingOverlay = document.getElementById('loading-overlay');
+  
+  function checkPyodideAndRun() {
+    if (typeof loadPyodide !== 'undefined') {
+      console.log('Pyodide loaded, running main()...');
+      main().finally(() => {
+          // ★★★ 成功・失敗にかかわらず、ローディング画面を非表示 ★★★
+          if (loadingOverlay) {
+              loadingOverlay.style.opacity = '0';
+              setTimeout(() => {
+                  loadingOverlay.style.display = 'none';
+              }, 300); // 0.3秒後に非表示
+          }
+      });
+    } else {
+      console.log('Waiting for Pyodide to load...');
+      setTimeout(checkPyodideAndRun, 100);
+    }
+  }
+
+  // チェックを開始
+  checkPyodideAndRun();
+  // ★★★ 3Dシーンの初期化を呼び出す ★★★
+  init3DScene();
+};
+</script>
+</body>
+</html>
