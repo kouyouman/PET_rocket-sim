@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import { normalizeCalibration,serializeCalibration,parseCalibration } from '../js/flight/calibration.js';
+test('calibration profile round trips with a model version',()=>{const profile=normalizeCalibration({name:'実験A',dragCoefficient:.62});const parsed=parseCalibration(serializeCalibration(profile));assert.equal(parsed.name,'実験A');assert.equal(parsed.dragCoefficient,.62);assert.ok(parsed.modelVersion)});
