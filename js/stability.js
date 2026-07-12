@@ -58,7 +58,9 @@ export function calculateStability(input) {
   const fullBaseMass = baseMass + waterMass;
   const fullBaseMoment = baseMoment + waterMass * waterCg;
 
-  let ballast = workshopBallastKg;
+  let recommendedBallastKg = null;
+  const appliedBallastKg = targetStaticMargin === null ? workshopBallastKg : 0;
+  let ballast = appliedBallastKg;
   if (targetStaticMargin !== null) {
     const requestedCg = cpM - targetStaticMargin * referenceDiameter;
     const denominator = requestedCg - ballastCg;
@@ -67,7 +69,8 @@ export function calculateStability(input) {
       ballast = null;
     } else {
       ballast = Math.max(0, (fullBaseMoment - requestedCg * fullBaseMass) / denominator);
-      if (ballast > 0.5) issues.push(issue('targetStaticMargin', 'EXCESSIVE_BALLAST', 'warning', '推奨バラストが500 gを超えています。形状の見直しを推奨します。'));
+      recommendedBallastKg = ballast;
+      if (ballast > 0.15 || ballast > baseMass * 2) issues.push(issue('targetStaticMargin', 'EXCESSIVE_BALLAST', 'warning', '推奨バラストが機体に対して大きすぎます。フィンや機体形状の見直しを推奨します。'));
     }
   }
   if (ballast === null) return { ok: false, cpM, issues, recommendedBallastKg: null };
@@ -79,8 +82,8 @@ export function calculateStability(input) {
   if (Math.min(staticMarginFull, staticMarginEmpty) < safeThreshold - 1e-9) issues.push(issue('staticMargin', 'UNSTABLE', 'warning', `静安定余裕が推奨値 ${safeThreshold} 未満です。`));
   return {
     ok: true, cpM, cgFullM, cgEmptyM, staticMarginFull, staticMarginEmpty,
-    recommendedBallastKg: ballast, finAreaOneM2: finAreaOne,
-    totalDryMassKg: baseMass + ballast,
+    baseDryMassKg: baseMass, recommendedBallastKg, appliedBallastKg,
+    finAreaOneM2: finAreaOne, totalDryMassKg: baseMass + ballast,
     issues,
     model: 'Barrowman-style, incompressible, small-angle, subsonic estimate',
     assumptions: ['軸対称の細長い機体', '小迎角・亜音速', '胴体揚力とフィン干渉を簡略化']

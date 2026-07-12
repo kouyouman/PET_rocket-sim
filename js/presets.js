@@ -17,7 +17,9 @@ export function migratePreset(raw) {
       vwater: old.vwater ?? old.Vw ?? 400, cRoot: old.c_root ?? old.Cr ?? 80,
       span: old.span ?? old.S ?? 60, sweep: old.sweep ?? old.Sweep ?? 10,
       nfin: old.nfin ?? old.Nfin ?? 4, mfin: old.mfin ?? old.Mfin ?? 5,
-      finpos: old.finpos ?? old.FinPos ?? 20, smTarget: old.sm_target ?? old.SM_t ?? 1.2
+      finpos: old.finpos ?? old.FinPos ?? 20, smTarget: old.sm_target ?? old.SM_t ?? 1.2,
+      pressureKind: old.flight_pressure_kind ?? old.pressureKind ?? 'gauge',
+      actualBallast: old.flight_actual_ballast ?? old.actualBallast ?? 0
     }
   };
 }

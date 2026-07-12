@@ -242,6 +242,13 @@
       .flight-chart-toolbar button.active { background:var(--secondary-color); }
       #flight-unified-canvas { width:100%; height:620px; display:block; touch-action:none; }
       .flight-data-table { font-size:.8rem; margin-top:.7rem; }
+      .flight-mass-breakdown { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:12px 0; }
+      .flight-mass-item { padding:9px 10px; border:1px solid var(--border-color); background:var(--surface-subtle); }
+      .flight-mass-item span { display:block; color:var(--text-muted); font-size:.76rem; }
+      .flight-mass-item output { display:block; margin-top:2px; color:var(--text-strong); font-size:1rem; text-align:right; }
+      .flight-mass-item.recommended { border-left:3px solid var(--warning); }
+      #flight-diagnostics { margin-top:12px; }
+      .flight-diagnostic { padding:9px 10px; margin-top:6px; border-left:3px solid var(--warning); background:var(--warning-bg); color:#5e491f; font-size:.86rem; }
       @media(max-width:600px){ .flight-hero-results{grid-template-columns:1fr 1fr} #flight-unified-canvas{height:520px} }
 
       /* Unified industrial design system */
@@ -559,11 +566,21 @@
                     <input id="flight_bottle_volume" type="range" min="500" max="2500" value="1500" step="50"><output>1500</output>
                 </div>
                 <div class="input-group">
+                    <label for="flight_actual_ballast"><ruby>実際<rt>じっさい</rt></ruby>に<ruby>取<rt>と</rt></ruby>り<ruby>付<rt>つ</rt></ruby>けるバラスト (g)</label>
+                    <input id="flight_actual_ballast" type="range" min="0" max="500" value="0" step="1"><output>0</output>
+                </div>
+                <div class="flight-mass-breakdown" aria-label="フライト質量内訳">
+                    <div class="flight-mass-item"><span><ruby>基礎<rt>きそ</rt></ruby><ruby>乾燥質量<rt>かんそうしつりょう</rt></ruby></span><output id="flight_base_dry_mass">--</output></div>
+                    <div class="flight-mass-item recommended"><span><ruby>推奨<rt>すいしょう</rt></ruby>バラスト（参考）</span><output id="flight_recommended_ballast">--</output></div>
+                    <div class="flight-mass-item"><span><ruby>水質量<rt>みずしつりょう</rt></ruby></span><output id="flight_water_mass">--</output></div>
+                    <div class="flight-mass-item"><span><ruby>発射時<rt>はっしゃじ</rt></ruby><ruby>総質量<rt>そうしつりょう</rt></ruby></span><output id="flight_launch_mass">--</output></div>
+                </div>
+                <div class="input-group">
                     <label for="flight_pressure"><ruby>初期<rt>しょき</rt></ruby><ruby>内圧<rt>ないあつ</rt></ruby> (<ruby>気圧<rt>きあつ</rt></ruby>)</label>
                     <input id="flight_pressure" type="range" min="3" max="8" value="5" step="0.5" oninput="this.nextElementSibling.value=this.value"><output>5</output>
                 </div>
-                <div class="input-group"><label for="flight_pressure_kind"><ruby>圧力<rt>あつりょく</rt></ruby>の<ruby>種類<rt>しゅるい</rt></ruby></label><select id="flight_pressure_kind"><option value="absolute" selected>絶対圧（真空を0）</option><option value="gauge">ゲージ圧（外の空気との差）</option></select></div>
-                <p class="flight-help">ゲージ圧は「外の空気より、どれくらい強いか」です。</p>
+                <div class="input-group"><label for="flight_pressure_kind"><ruby>圧力<rt>あつりょく</rt></ruby>の<ruby>種類<rt>しゅるい</rt></ruby></label><select id="flight_pressure_kind"><option value="gauge" selected>ゲージ圧（外の空気との差）</option><option value="absolute">絶対圧（真空を0）</option></select></div>
+                <p class="flight-help">ゲージ圧は外気との差、絶対圧は真空を0とした圧力です。一般的なポンプ圧力計はゲージ圧です。</p>
                 <div class="input-group">
                     <label for="flight_d_noz">ノズル<ruby>径<rt>けい</rt></ruby> (mm)</label>
                     <input id="flight_d_noz" type="range" min="5" max="21" value="8" step="0.5" oninput="this.nextElementSibling.value=this.value"><output>8</output>
@@ -624,8 +641,11 @@
                     <tr><td><ruby>総飛行時間<rt>そうひこうじかん</rt></ruby> (s)</td><td id="t_flight_out">--</td></tr>
                     <tr><td><ruby>水平<rt>すいへい</rt></ruby><ruby>飛距離<rt>ひきょり</rt></ruby> (m)</td><td id="range_out">--</td></tr>
                     <tr><td>ランチャー<ruby>離脱<rt>りだつ</rt></ruby><ruby>速度<rt>そくど</rt></ruby> (m/s)</td><td id="launcher_v_out">--</td></tr>
+                    <tr><td><ruby>使用<rt>しよう</rt></ruby><ruby>乾燥質量<rt>かんそうしつりょう</rt></ruby> (g)</td><td id="flight_used_dry_mass_out">--</td></tr>
+                    <tr><td><ruby>絶対圧換算<rt>ぜったいあつかんさん</rt></ruby> (気圧)</td><td id="flight_absolute_pressure_out">--</td></tr>
                 </tbody>
             </table>
+            <div id="flight-diagnostics" aria-live="polite"></div>
         </div>
         <div class="visual-panel">
             <div id="flight-plot-container"></div>
@@ -1102,6 +1122,7 @@ const keyMap = {
     // --- 水素ロケット用に追加 ---
     d_upper: 'D_up', l_upper: 'L_up', l_trans: 'L_trans', d_lower: 'D_low', l_lower: 'L_low', w_h2_body: 'W_h2'
 };
+const flightPresetIds = ['flight_bottle_volume','flight_actual_ballast','flight_pressure','flight_pressure_kind','flight_d_noz','flight_temperature','flight_angle','flight_launcher_length','flight_wind_speed','flight_wind_direction','flight_discharge_coefficient','flight_polytropic_exponent','flight_drag_coefficient','flight_time_step'];
 
 function getStabParamsFromUI(){
   const params = {};
@@ -1129,6 +1150,7 @@ function getStabParamsFromUI(){
 
       params[keyMap[key]] = v;
     });
+    flightPresetIds.forEach(id => { const el=document.getElementById(id); if(el) presetData[id]=el.value; });
     
     // ★★★ モードに応じて紙粘土(W_ballast_ws)を送る ★★★
     if (isWS) {
@@ -1209,6 +1231,11 @@ function loadPreset(index) {
                     inputElem.nextElementSibling.value = paramsToLoad[id];
                 }
             }
+        });
+        flightPresetIds.forEach(id => {
+            const inputElem=document.getElementById(id);
+            const saved=paramsToLoad[id] !== undefined ? paramsToLoad[id] : (id === 'flight_pressure_kind' ? 'gauge' : undefined);
+            if(inputElem && saved !== undefined){ inputElem.value=saved; if(inputElem.nextElementSibling && (inputElem.nextElementSibling.tagName==='INPUT'||inputElem.nextElementSibling.tagName==='OUTPUT')) inputElem.nextElementSibling.value=saved; }
         });
         
         // ★ 3. 共有パラメータ（ノーズやフィン）の状態を上書き

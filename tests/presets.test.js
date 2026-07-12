@@ -7,4 +7,5 @@ test('legacy preset migrates FinPos zero without replacing it', () => {
   assert.equal(migrated.schemaVersion, PRESET_SCHEMA_VERSION);
   assert.equal(migrated.ui.finpos, 0);
   assert.equal(migrated.ui.diam, 66);
+  assert.equal(migrated.ui.pressureKind,'gauge');
 });

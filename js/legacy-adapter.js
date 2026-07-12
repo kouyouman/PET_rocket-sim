@@ -1,4 +1,4 @@
-import { mmToM, gToKg, mlToM3 } from './units.js';
+import { mmToM, gToKg, mlToM3, atmospheresToAbsolutePa } from './units.js';
 import { calculateStability } from './stability.js';
 import { sizeParachute } from './parachute.js';
 import { simulateFlight, simulateTrajectory2D } from './flight.js';
@@ -123,7 +123,12 @@ function updateStability() {
   }
   if (stable) setStatus('success', isWorkshop() ? '安定性OK' : '安定性OK', rocketType() === 'hydrogen' ? '機体設計は利用できます。水素の飛行計算は未対応です。' : '上部のタブから次の設計に進めます。');
   else renderStabilityIssues(result);
-  const paraMass = byId('para_mass_out'); if (paraMass) paraMass.value = (result.totalDryMassKg * 1000).toFixed(1);
+  if (isWorkshop() && byId('flight_actual_ballast')) {
+    byId('flight_actual_ballast').value = String(number('ws_ballast', 0));
+    const numberField = byId('flight_actual_ballast').nextElementSibling; if (numberField?.classList.contains('range-number')) numberField.value = byId('flight_actual_ballast').value;
+  }
+  const paraMass = byId('para_mass_out'); if (paraMass) paraMass.value = ((result.baseDryMassKg + gToKg(number('flight_actual_ballast', 0))) * 1000).toFixed(1);
+  updateFlightMassBreakdown();
   if (typeof window.drawRocket3D === 'function') window.drawRocket3D(legacyParams(input, result), legacy);
   return result;
 }
@@ -144,21 +149,26 @@ function updateParachute() {
 function flightInput() {
   const input = stabilityInput();
   const atmosphericPressurePa = 101325;
-  const pressureValue = number('flight_pressure', 5) * 101325;
-  const initialAbsolutePressurePa = byId('flight_pressure_kind')?.value === 'gauge' ? pressureValue + atmosphericPressurePa : pressureValue;
+  const initialAbsolutePressurePa = atmospheresToAbsolutePa(number('flight_pressure', 5), byId('flight_pressure_kind')?.value || 'gauge', atmosphericPressurePa);
   const calibration = normalizeCalibration({ dischargeCoefficient: number('flight_discharge_coefficient', .95), polytropicExponent: number('flight_polytropic_exponent', 1.2), dragCoefficient: number('flight_drag_coefficient', .5) });
+  const baseDryMassKg = state.stability?.baseDryMassKg ?? input.mass.noseMassKg + input.mass.bodyMassKg + input.mass.finMassEachKg * input.geometry.finCount;
+  const ballastMassKg = gToKg(number('flight_actual_ballast', 0));
+  const dryMassKg = baseDryMassKg + ballastMassKg;
+  const actualStability = calculateStability({ ...input, targetStaticMargin: null, workshopBallastKg: ballastMassKg });
   return {
     geometry: { ...input.geometry, bottleVolumeM3: mlToM3(number('flight_bottle_volume', 1500)) },
-    mass: { dryMassKg: state.stability?.totalDryMassKg || input.mass.noseMassKg + input.mass.bodyMassKg + input.mass.finMassEachKg * input.geometry.finCount },
+    mass: { baseDryMassKg, ballastMassKg, dryMassKg },
     launch: {
       waterVolumeM3: input.waterVolumeM3, nozzleDiameterM: mmToM(number('flight_d_noz', 8)),
       initialAbsolutePressurePa, airTemperatureK: number('flight_temperature', 20) + 273.15,
+      pressureInput: { kind: byId('flight_pressure_kind')?.value || 'gauge', valueAtm: number('flight_pressure', 5), absolutePressurePa: initialAbsolutePressurePa },
       angleRad: number('flight_angle', 90) * Math.PI / 180, launcherLengthM: number('flight_launcher_length', .5)
     },
     environment: { atmosphericPressurePa, airDensityKgM3: 1.225, gravityMps2: 9.80665, dragCoefficient: calibration.dragCoefficient, dischargeCoefficient: calibration.dischargeCoefficient, polytropicExponent: calibration.polytropicExponent,
       windMps: { x: number('flight_wind_speed', 0) * Math.cos(number('flight_wind_direction', 0) * Math.PI / 180), z: 0 } },
     parachute: state.parachute?.ok ? { enabled: true, areaM2: state.parachute.areaM2, dragCoefficient: number('para_cdp', .75), deploymentDelayS: 0 } : { enabled: false, areaM2: .1, dragCoefficient: .75, deploymentDelayS: 0 },
-    integration: { timeStepS: number('flight_time_step', .002), maxTimeS: 60 }, calibration
+    integration: { timeStepS: number('flight_time_step', .002), maxTimeS: 60 }, calibration,
+    stabilityAssessment: actualStability.ok ? { staticMarginFull: actualStability.staticMarginFull, staticMarginEmpty: actualStability.staticMarginEmpty, threshold: .7 } : null
   };
 }
 
@@ -173,14 +183,41 @@ function runFlightSimulation() {
       const waterOut = result.events.find(event => event.type === 'water-out'); setText('t_water_out', waterOut ? waterOut.timeS.toFixed(3) : '0.000');
       setText('t_propulsion_out', result.propulsionEndTimeS.toFixed(3)); setText('t_apogee_out', result.apogeeTimeS == null ? '--' : result.apogeeTimeS.toFixed(3));
       setText('t_flight_out', result.totalFlightTimeS.toFixed(3)); setText('range_out', result.horizontalRangeM.toFixed(2)); setText('launcher_v_out', result.launcherExitVelocityMps == null ? '--' : result.launcherExitVelocityMps.toFixed(2));
+      setText('flight_used_dry_mass_out', (result.massBreakdown.dryMassKg * 1000).toFixed(1)); setText('flight_absolute_pressure_out', (result.pressureInput.absolutePressurePa / 101325).toFixed(2));
       setText('flight_hero_height', `${result.maxAltitudeM.toFixed(1)} m`); setText('flight_hero_speed', `${result.maxVelocityMps.toFixed(1)} m/s`); setText('flight_hero_range', `${result.horizontalRangeM.toFixed(1)} m`); setText('flight_hero_time', `${result.totalFlightTimeS.toFixed(1)} s`);
       const container = byId('flight-plot-container');
       if (container) renderFlightCharts(container, result);
+      renderFlightDiagnostics(result.diagnostics);
     } else {
       const container = byId('flight-plot-container'); if (container) container.textContent = result.issues[0]?.message || '計算できませんでした。';
     }
     if (button) { button.disabled = false; button.innerHTML = 'シミュレーション<ruby>実行<rt>じっこう</rt></ruby>'; }
   });
+}
+
+function updateFlightMassBreakdown() {
+  if (!state.stability) return;
+  const baseKg = state.stability.baseDryMassKg ?? state.stability.totalDryMassKg;
+  const actualKg = gToKg(number('flight_actual_ballast', 0));
+  const waterKg = gToKg(number('vwater', 0));
+  const absolutePressurePa = atmospheresToAbsolutePa(number('flight_pressure', 5), byId('flight_pressure_kind')?.value || 'gauge', 101325);
+  const airVolumeM3 = Math.max(1e-9, mlToM3(number('flight_bottle_volume', 1500) - number('vwater', 0)));
+  const airKg = Math.max(0, absolutePressurePa * airVolumeM3 / (287.05 * (number('flight_temperature', 20) + 273.15)));
+  setText('flight_base_dry_mass', `${(baseKg * 1000).toFixed(1)} g`);
+  setText('flight_recommended_ballast', state.stability.recommendedBallastKg == null ? 'なし' : `${(state.stability.recommendedBallastKg * 1000).toFixed(1)} g`);
+  setText('flight_water_mass', `${(waterKg * 1000).toFixed(1)} g`);
+  setText('flight_launch_mass', `${((baseKg + actualKg + waterKg + airKg) * 1000).toFixed(1)} g`);
+}
+
+function updateActualBallastDependents() {
+  updateFlightMassBreakdown();
+  if (state.stability && byId('para_mass_out')) byId('para_mass_out').value = ((state.stability.baseDryMassKg + gToKg(number('flight_actual_ballast', 0))) * 1000).toFixed(1);
+  updateParachute();
+}
+
+function renderFlightDiagnostics(diagnostics = []) {
+  const container = byId('flight-diagnostics'); if (!container) return;
+  container.innerHTML = diagnostics.map(item => `<div class="flight-diagnostic"><strong>${item.title}</strong><br>${item.message}</div>`).join('');
 }
 
 function renderFlightCharts(container, result) {
@@ -209,6 +246,9 @@ function openTab(name) {
 function initializeSimulatorCore() {
   updateStability();
   updateParachute();
+  byId('flight_actual_ballast')?.addEventListener('input', updateActualBallastDependents);
+  ['flight_pressure','flight_pressure_kind','flight_bottle_volume','flight_temperature'].forEach(id => byId(id)?.addEventListener('input', updateFlightMassBreakdown));
+  updateFlightMassBreakdown();
 }
 
 Object.assign(window, { updateStability, updateParachute, runFlightSimulation, initializeSimulatorCore, openTab });

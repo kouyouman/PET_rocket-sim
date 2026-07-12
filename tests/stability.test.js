@@ -46,3 +46,10 @@ test('hydrogen stability recommendation threshold remains 1.0',()=>{
   const input=structuredClone(base);input.rocketType='hydrogen';input.geometry.upperDiameterM=.011;input.geometry.lowerDiameterM=.016;input.geometry.upperLengthM=.1;input.geometry.transitionLengthM=.005;input.geometry.lowerLengthM=.15;input.geometry.finRootChordM=.015;input.geometry.finSpanM=.003;input.mass.bodyMassKg=.05;input.mass.noseMassKg=0;input.waterVolumeM3=0;input.targetStaticMargin=null;input.workshopBallastKg=0;
   assert.equal(calculateStability(input).issues.some(issue=>issue.code==='UNSTABLE'),true);
 });
+
+test('default PET mass breakdown separates 70 g base mass from recommended ballast',()=>{
+  const input=structuredClone(base);input.targetStaticMargin=1.2;const result=calculateStability(input);
+  assert.ok(Math.abs(result.baseDryMassKg-.07)<1e-12);
+  assert.ok(result.recommendedBallastKg>.45&&result.recommendedBallastKg<.49);
+  assert.equal(result.appliedBallastKg,0);
+});

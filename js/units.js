@@ -12,6 +12,10 @@ export function pressureToAbsolutePa(valueBar, kind, atmosphericPressurePa = 101
   return kind === 'absolute' ? pressure : pressure + atmosphericPressurePa;
 }
 
+export function atmospheresToAbsolutePa(valueAtm, kind, atmosphericPressurePa = 101325) {
+  return kind === 'gauge' ? valueAtm * atmosphericPressurePa + atmosphericPressurePa : valueAtm * atmosphericPressurePa;
+}
+
 export function finiteNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;

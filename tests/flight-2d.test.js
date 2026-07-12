@@ -64,3 +64,14 @@ test('RK4 result converges when the time step is halved',()=>{
   assert.ok(Math.abs(coarse.maxAltitudeM-fine.maxAltitudeM)/fine.maxAltitudeM<.01);
   assert.ok(Math.abs(coarse.horizontalRangeM-fine.horizontalRangeM)<.25);
 });
+
+test('actual ballast increases dry mass and lowers altitude without using recommended ballast implicitly',()=>{
+  const light=run({mass:{baseDryMassKg:.07,ballastMassKg:0,dryMassKg:.07}});
+  const heavy=run({mass:{baseDryMassKg:.07,ballastMassKg:.2,dryMassKg:.27}});
+  assert.equal(light.massBreakdown.dryMassKg,.07);assert.equal(heavy.massBreakdown.ballastMassKg,.2);assert.ok(light.maxAltitudeM>heavy.maxAltitudeM);
+});
+
+test('diagnostics identify excessive ballast and low actual static margin',()=>{
+  const result=run({mass:{baseDryMassKg:.07,ballastMassKg:.2,dryMassKg:.27},stabilityAssessment:{staticMarginFull:.4,staticMarginEmpty:.6,threshold:.7}});
+  assert.ok(result.diagnostics.some(item=>item.code==='HEAVY_BALLAST'));assert.ok(result.diagnostics.some(item=>item.code==='LOW_STATIC_MARGIN'));
+});

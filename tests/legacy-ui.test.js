@@ -40,3 +40,8 @@ test('UI documents the PET 0.7 threshold and removes decorative emoji',()=>{
   assert.match(html,/0\.7<ruby>以上/);
   assert.doesNotMatch(html,/[📏🎨🚀📐🌬🔧🏔⚡↔⏱😆🫤⚠✅💧💨⭐🪂🏁📊]/u);
 });
+
+test('flight UI separates actual ballast, mass breakdown, and defaults pressure to gauge',()=>{
+  for(const id of ['flight_actual_ballast','flight_base_dry_mass','flight_recommended_ballast','flight_water_mass','flight_launch_mass','flight_used_dry_mass_out','flight_absolute_pressure_out','flight-diagnostics'])assert.match(html,new RegExp(`id="${id}"`));
+  assert.match(html,/id="flight_pressure_kind"[\s\S]*?<option value="gauge" selected>/);
+});

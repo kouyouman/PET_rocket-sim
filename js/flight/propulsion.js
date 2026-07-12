@@ -10,10 +10,13 @@ export function evaluateWaterJet(state, { geometry, launch, environment }) {
   const nozzleAreaM2 = Math.PI * (launch.nozzleDiameterM / 2) ** 2;
   const airVolumeM3 = geometry.bottleVolumeM3 - state.waterVolumeM3;
   const pressurePa = launch.initialAbsolutePressurePa * (state.initialAirVolumeM3 / airVolumeM3) ** environment.polytropicExponent;
+  const tankTemperatureK = launch.airTemperatureK * (state.initialAirVolumeM3 / airVolumeM3) ** (environment.polytropicExponent - 1);
   const pressureDeltaPa = Math.max(0, pressurePa - environment.atmosphericPressurePa);
   const exhaustVelocityMps = pressureDeltaPa > 0 ? Math.sqrt(2 * pressureDeltaPa / WATER_DENSITY_KG_M3) : 0;
   const waterMassFlowKgs = environment.dischargeCoefficient * nozzleAreaM2 * WATER_DENSITY_KG_M3 * exhaustVelocityMps;
-  return { pressurePa, pressureDeltaPa, thrustN: waterMassFlowKgs * exhaustVelocityMps, waterVolumeRateM3s: -waterMassFlowKgs / WATER_DENSITY_KG_M3, airMassRateKgs: 0, airTemperatureRateKs: 0, exhaustVelocityMps, flowRegime: 'water' };
+  const waterVolumeRateM3s = -waterMassFlowKgs / WATER_DENSITY_KG_M3;
+  const airTemperatureRateKs = (environment.polytropicExponent - 1) * tankTemperatureK / airVolumeM3 * waterVolumeRateM3s;
+  return { pressurePa, pressureDeltaPa, thrustN: waterMassFlowKgs * exhaustVelocityMps, waterVolumeRateM3s, airMassRateKgs: 0, airTemperatureRateKs, tankTemperatureK, bottleVolumeM3: geometry.bottleVolumeM3, exhaustVelocityMps, flowRegime: 'water' };
 }
 
 /** Compressible ideal-gas nozzle flow, including choked and unchoked regimes. */
@@ -59,7 +62,9 @@ export function advancePropulsion(state, rates, dtS) {
   const next = { ...state, waterVolumeM3: Math.max(0, state.waterVolumeM3 + rates.waterVolumeRateM3s * effectiveDt), airMassKg: Math.max(0, state.airMassKg + rates.airMassRateKgs * effectiveDt), airTemperatureK: Math.max(1, state.airTemperatureK + rates.airTemperatureRateKs * effectiveDt) };
   const events = [];
   if (state.phase === 'water' && (next.waterVolumeM3 <= EPSILON || rates.pressureDeltaPa <= 0)) {
-    next.phase = 'air'; next.waterVolumeM3 = 0; next.waterEndPressurePa = rates.pressurePa; next.airMassAtWaterEndKg = next.airMassKg; next.airTemperatureAtWaterEndK = next.airTemperatureK; events.push({ type: 'water-out', fraction });
+    next.phase = 'air'; next.waterVolumeM3 = 0; next.waterEndPressurePa = rates.pressurePa; next.airMassAtWaterEndKg = next.airMassKg;
+    if (rates.bottleVolumeM3 && next.airMassKg > EPSILON) next.airTemperatureK = rates.pressurePa * rates.bottleVolumeM3 / (next.airMassKg * AIR_GAS_CONSTANT_J_KG_K);
+    next.airTemperatureAtWaterEndK = next.airTemperatureK; events.push({ type: 'water-out', fraction });
   } else if (state.phase === 'air' && (rates.pressureDeltaPa <= 0 || next.airMassKg <= EPSILON)) {
     next.phase = 'coast'; events.push({ type: 'air-out', fraction: 1 });
   }
